@@ -6,6 +6,7 @@ categories: WebGL
 ---
 
 {% highlight javascript %}
+```
 var gl;
 function initWebGL(canvas) {
   gl = null;
@@ -35,5 +36,6 @@ function start() {
 document.onload = function() {
 	start();
 }
+```
 {% endhighlight %}
 
