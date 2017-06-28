@@ -6,6 +6,8 @@ categories: WebGL
 ---
 
 {% highlight javascript %}
-function Hello()
+function Hello() {
+	
+}
 {% endhighlight %}
 
