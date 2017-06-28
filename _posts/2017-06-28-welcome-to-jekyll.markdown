@@ -5,8 +5,6 @@ date:   2017-06-28 16:13:25 +0800
 categories: WebGL
 ---
 
-{% include webgl-01.html %}
-
 {% highlight javascript %}
 var gl;
 function initWebGL(canvas) {
