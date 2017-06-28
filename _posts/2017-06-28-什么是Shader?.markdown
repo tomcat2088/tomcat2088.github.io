@@ -1,0 +1,202 @@
+---
+layout: default
+title:  "什么是Shader？"
+date:   2017-06-28 16:15:25 +0800
+categories: 学习OpenGLES系列文章
+---
+
+> [本系列所有文章目录](http://www.jianshu.com/p/df4c8f9bc08d)
+> 本文所用的代码在`https://github.com/SquarePants1991/OpenGLESLearn.git`的`chapter3`分支中。
+
+上一篇文章中我们有说到OpenGL的渲染流程。
+
+![](http://upload-images.jianshu.io/upload_images/2949750-202ed7c980a7aef7.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+这其中Vertex Shader和Fragment Shader两步是可编程的。简而言之，Vertex Shader负责将顶点数据进一步处理，Fragment Shader将像素数据进一步处理。所以Vertex Shader中的代码针对每个点都会调用一次，Fragment Shader中的代码针对每个像素都会调用一次。接下来我就分三个部分讲解Shader的相关知识。
+
+### 如何使用Shader
+要使用Shader首先要编译Shader代码。
+```
+bool compileShader(GLuint *shader, GLenum type, const GLchar *source) {
+    GLint status;
+    
+    if (!source) {
+        printf("Failed to load vertex shader");
+        return false;
+    }
+    
+    *shader = glCreateShader(type);
+    glShaderSource(*shader, 1, &source, NULL);
+    glCompileShader(*shader);
+    
+    GLint logLength;
+    glGetShaderiv(*shader, GL_INFO_LOG_LENGTH, &logLength);
+    
+#if Debug
+    if (logLength > 0) {
+        GLchar *log = (GLchar *)malloc(logLength);
+        glGetShaderInfoLog(*shader, logLength, &logLength, log);
+        printf("Shader compile log:\n%s", log);
+        printf("Shader: \n %s\n", source);
+        free(log);
+    }
+#endif
+    
+    glGetShaderiv(*shader, GL_COMPILE_STATUS, &status);
+    if (status == 0) {
+        glDeleteShader(*shader);
+        return false;
+    }
+    
+    return true;
+}
+```
+然后把编译好的Shader附加到Program上，Program可以理解为一个跑在GPU上的小程序。
+```
+// Attach vertex shader to program.
+glAttachShader(program, vertShader);
+    
+// Attach fragment shader to program.
+glAttachShader(program, fragShader);
+```
+然后链接Program
+```
+    if (!linkProgram(program)) {
+        printf("Failed to link program: %d", program);
+        
+        if (vertShader) {
+            glDeleteShader(vertShader);
+            vertShader = 0;
+        }
+        if (fragShader) {
+            glDeleteShader(fragShader);
+            fragShader = 0;
+        }
+        if (program) {
+            glDeleteProgram(program);
+            program = 0;
+        }
+        return false;
+    }
+```
+```
+bool linkProgram(GLuint prog) {
+    GLint status;
+    glLinkProgram(prog);
+    
+#if Debug
+    GLint logLength;
+    glGetProgramiv(prog, GL_INFO_LOG_LENGTH, &logLength);
+    if (logLength > 0) {
+        GLchar *log = (GLchar *)malloc(logLength);
+        glGetProgramInfoLog(prog, logLength, &logLength, log);
+        printf("Program link log:\n%s", log);
+        free(log);
+    }
+#endif
+    
+    glGetProgramiv(prog, GL_LINK_STATUS, &status);
+    if (status == 0) {
+        return false;
+    }
+    
+    return true;
+}
+```
+链接完后就可以使用了。所有和GPU交互的代码都会用到program的值。激活Vertex Shader属性的代码就用到了program。
+```
+GLuint positionAttribLocation = glGetAttribLocation(self.shaderProgram, "position");
+glEnableVertexAttribArray(positionAttribLocation);
+GLuint colorAttribLocation = glGetAttribLocation(self.shaderProgram, "color");
+glEnableVertexAttribArray(colorAttribLocation);
+```
+
+### Vertex Shader的语法
+为了介绍Shader中的`uniform`变量，我特地在上一篇文章的基础上修改了Vertex Shader，如下。
+```
+attribute vec4 position;
+attribute vec4 color;
+
+uniform float elapsedTime;
+
+varying vec4 fragColor;
+
+void main(void) {
+    fragColor = color;
+    float angle = elapsedTime * 1.0;
+    float xPos = position.x * cos(angle) - position.y * sin(angle);
+    float yPos = position.x * sin(angle) + position.y * cos(angle);
+    gl_Position = vec4(xPos, yPos, position.z, 1.0);
+}
+```
+Shader的变量声明格式为：`变量类型 变量数据类型 变量名;`
+`变量类型`有三种：
+1. `attribute`：就是顶点数据(Vertex Data)包含的属性，位置，颜色或是其他，顶点数据包含多少属性，这里就可以写多少，通过`glEnableVertexAttribArray`和`glVertexAttribPointer`激活和传值。
+1. `varying`: 传递给Fragment Shader的变量，Fragment Shader是无法直接接受顶点数据的，因为它处理的是像素级别的数据。传递给Fragment Shader的值是根据像素位置插值计算之后的值。
+1. `uniform`: 可以理解为全局变量，所有顶点处理程序共享这个变量。
+
+`变量数据类型`有：
+1. `vecX`: vec开头的有`vec2`,`vec3`,`vec4`,分别代表二维，三维，四维向量。初始化方式分别为，`vec2(x,y)`,`vec3(x,y,z)`,`vec4(x,y,z,w)`
+1. `float`: 浮点数，记住，shader中int是不会自动转换为float的，所有需要使用float的地方必须写成浮点数格式，比如1要写成1.0，0要写成0.0。
+1. `int`: 整型
+1. `matX`: vec开头的有`mat2`,`mat3`,`mat4`,分别代表二维，三维，四维矩阵。主要用来传递变换矩阵，后面使用到时会介绍。
+
+上面的代码的`uniform`变量`elapsedTime`表示的是程序运行经过时间的秒数。
+```
+float angle = elapsedTime * 1.0;//修改1.0为其他值可以调整转速
+float xPos = position.x * cos(angle) - position.y * sin(angle);
+float yPos = position.x * sin(angle) + position.y * cos(angle);
+gl_Position = vec4(xPos, yPos, position.z, 1.0);
+```
+将position围绕(0,0,0)点旋转角度angle，然后将旋转后的点赋给gl_Position，就是交给OpenGL进行后续处理。angle会根据`elapsedTime`变化，所以点的位置也会根据`elapsedTime`变化。
+
+我增加了两行代码来为uniform elapsedTime赋值。
+```
+- (void)glkView:(GLKView *)view drawInRect:(CGRect)rect {
+    // 清空之前的绘制
+    glClearColor(1, 0.2, 0.2, 1);
+    glClear(GL_COLOR_BUFFER_BIT);
+    
+    // 使用fragment.glsl 和 vertex.glsl中的shader
+    glUseProgram(self.shaderProgram);
+    // 设置shader中的 uniform elapsedTime 的值
+    GLuint elapsedTimeUniformLocation = glGetUniformLocation(self.shaderProgram, "elapsedTime");
+    glUniform1f(elapsedTimeUniformLocation, (GLfloat)self.elapsedTime);
+    
+    [self drawTriangle];
+}
+```
+先获取`uniform elapsedTime`的位置，因为`elapsedTime`是`float`类型，所以使用`glUniform1f`进行赋值。如果是其他类型的`uniform`，就需要使用其他的`glUniformXXX`方法赋值了。后面用到的时候再详细介绍。
+
+这个Shader具体的效果如下：
+
+
+![shader.gif](http://upload-images.jianshu.io/upload_images/2949750-06531a4a184fd93f.gif?imageMogr2/auto-orient/strip)
+每个顶点都会旋转，所以最后整个三角形都在旋转。如果你乐意的话，还可以在Vertex Shader中对顶点位置进行缩放或者移动。试试看会有什么样的效果。
+
+
+### Fragment Shader的语法
+```
+varying lowp vec4 fragColor;
+uniform highp float elapsedTime;
+
+void main(void) {
+    highp float processedElapsedTime = elapsedTime;
+    highp float intensity = (sin(processedElapsedTime) + 1.0) / 2.0;
+    gl_FragColor = fragColor * intensity;
+}
+
+```
+Fragment Shader的变量只能是`uniform`和`varying`，这里的`varying`是从Vertex Shader传过来的值。与Vertex Shader不同的是，这里的变量都要声明精度，比如` highp float processedElapsedTime = elapsedTime;`中的`highp`代表高精度。精度包括`lowp` `highp` `mediump`,低精度，高精度，中等精度。如果你不想为每一个变量都指定精度可以在第一行写上`precision highp float; `，当然这只是为float指定默认精度highp。要为其他类型指定精度的话继续加就好了。比如再加上`precision highp vec2; `。
+上面的Fragment Shader中我把传递过来的颜色根据当前的`elapsedTime`进行了计算，颜色的强度会随着` (sin(processedElapsedTime) + 1.0) / 2.0;`的曲线变化。这里我做了`vec4 * float`的运算，结果仍然是`vec4`。`vec4(a,b,c,d) * f`的运算结果是`vec4(a*f,b*f,c*f,d*f)`。
+使用了这个Fragment Shader后效果如下。
+
+![](http://upload-images.jianshu.io/upload_images/2949750-89d0a2149ce39358.gif?imageMogr2/auto-orient/strip)
+
+本文主要通过Shader的两个小动画介绍了Vertex Shader和Fragment Shader的基本语法和功能。如果你想要了解更多Shader中的运算规则和内置函数请参见：
+[OpenGL-ES-2_0-Reference-card](https://www.khronos.org/opengles/sdk/docs/reference_cards/OpenGL-ES-2_0-Reference-card.pdf)
+我还发现了一个比较有意思的网站，可以直接在线编辑预览Fragment Shader。
+http://haxiomic.github.io/webgl-workshop/editor//index.html
+
+![](http://upload-images.jianshu.io/upload_images/2949750-11c81793731c9c3d.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+
+`time`是一个默认的uniform，会随着时间改变。`uv`是纹理坐标，有两个值s和t，值从0到1。有兴趣的可以去玩玩。

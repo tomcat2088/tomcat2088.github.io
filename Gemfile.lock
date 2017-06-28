@@ -195,7 +195,7 @@ PLATFORMS
 DEPENDENCIES
   github-pages
   jekyll-feed (~> 0.6)
-  jekyll-theme-time-machine
+  minima (~> 2.0)
   tzinfo-data
 
 BUNDLED WITH

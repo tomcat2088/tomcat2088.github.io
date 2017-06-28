@@ -2,7 +2,7 @@
 layout: default
 title:  "第一个OpenGL ES项目"
 date:   2017-06-28 16:13:25 +0800
-categories: 学习OpenGL ES 
+categories: 学习OpenGLES系列文章
 ---
 
 > [本系列所有文章目录](http://www.jianshu.com/p/df4c8f9bc08d)

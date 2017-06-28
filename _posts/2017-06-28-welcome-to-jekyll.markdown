@@ -2,7 +2,7 @@
 layout: default
 title:  "第一个WebGL程序"
 date:   2017-06-28 16:13:25 +0800
-categories: WebGL
+categories: 学习WebGL系列文章
 ---
 
 
