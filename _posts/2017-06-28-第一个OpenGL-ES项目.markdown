@@ -1,5 +1,5 @@
 ---
-layout: post
+layout: default
 title:  "第一个OpenGL ES项目"
 date:   2017-06-28 16:13:25 +0800
 categories: 学习OpenGL ES 
