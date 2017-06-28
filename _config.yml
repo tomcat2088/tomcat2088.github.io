@@ -23,7 +23,7 @@ github_username:  SquarePants1991
 
 # Build settings
 markdown: kramdown
-theme: jekyll-theme-architect
+theme: jekyll-theme-cayman
 gems:
   - jekyll-feed
 
