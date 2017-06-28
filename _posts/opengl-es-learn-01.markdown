@@ -1,3 +1,10 @@
+---
+layout: post
+title:  "第一个OpenGL ES项目"
+date:   2017-06-28 16:13:25 +0800
+categories: OpenGL ES
+---
+
 > [本系列所有文章目录](http://www.jianshu.com/p/df4c8f9bc08d)
 
 最近一段时间在研究AR，为了熟悉3D渲染的相关知识，把OpenGL ES研究了一下。后续会写一些OpenGL ES系列的文章，内容上会由浅入深，相关代码会直接开源在Github上。想要学习OpenGL ES的朋友可以去看一下。
