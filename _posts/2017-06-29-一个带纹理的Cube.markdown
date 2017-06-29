@@ -1,0 +1,8 @@
+---
+layout: post
+title:  "一个带纹理的Cube"
+date:   2017-06-29 16:13:25 +0800
+categories: WebGL实验室
+---
+
+{% include webgl-experiment/texture-cube.html %}
