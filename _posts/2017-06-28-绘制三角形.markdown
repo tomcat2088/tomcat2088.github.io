@@ -1,5 +1,5 @@
 ---
-layout: default
+layout: post
 title:  "绘制三角形"
 date:   2017-06-28 16:14:25 +0800
 categories: 学习OpenGLES系列文章

@@ -1,5 +1,5 @@
 ---
-layout: default
+layout: post
 title:  "什么是Shader？"
 date:   2017-06-28 16:15:25 +0800
 categories: 学习OpenGLES系列文章
