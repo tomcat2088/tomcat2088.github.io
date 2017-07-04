@@ -25,15 +25,15 @@
       {% endif %}
     {% endfor %}
 
+    {% assign sortedposts = site.posts | sort 'date' 'first'%}
     {% for category in site.categories %}
+        {% assign category_name = category | first %}
         <a class="sidebar-nav-item category">{{ category | first }}</a>
         <div>
-          {% for posts in category %}
-            {% for post in posts %}
-              {% if post.url %}
-                <a class="sidebar-nav-item category-item" href="{{ post.url }}">{{ post.title }}</a>
+          {% for post in sortedposts %}
+             {% if post.url and post.categories contains category_name %}
+              <a class="sidebar-nav-item category-item" href="{{ post.url }}">{{ post.title }}</a>
               {% endif %}
-            {% endfor %}
           {% endfor %}
           </div>
     {% endfor %}

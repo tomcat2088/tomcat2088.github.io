@@ -1,0 +1,228 @@
+---
+layout: post
+title: 法线贴图
+date: 2017-07-03 19:42:32 +0800
+categories: 学习OpenGLES系列文章
+---
+
+> 本文所用的代码在`https://github.com/SquarePants1991/OpenGLESLearn.git`的`chapter19`分支中。
+
+本文将给大家介绍法线贴图的相关知识，在游戏中由于GPU资源有限，尤其是在移动设备中，所以无法使用大量的三角形来表示3D模型的细节。这时候法线贴图就成为了折中的渲染方案，既能够带来不错的细节表现效果，还可以减少资源的消耗。
+###### 未使用法线贴图的Cube
+![](http://upload-images.jianshu.io/upload_images/2949750-64ebdfdcfcbad9b3.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+###### 使用了法线贴图的Cube
+![](http://upload-images.jianshu.io/upload_images/2949750-5551883288f39919.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+
+通过上面的图可以看出，法线贴图给Cube表面增加了很多光照上的细节。
+
+#### 什么是法线贴图
+到目前为止我们接触到的贴图只有漫反射贴图，我们通过UV从漫反射贴图中提取颜色，然后使用光照模型处理。法线贴图同样也是一张图，可以使用UV从中提取颜色，只不过我们需要把颜色转换成法线向量。下面是本文的例子使用的法线贴图。
+![](http://upload-images.jianshu.io/upload_images/2949750-2c1171b60059cbbe.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+> 本文的法线贴图由[CrazyBump](http://www.crazybump.com/)生成
+
+是不是感觉很奇怪？下面我来揭露这张诡异贴图下隐藏的秘密。
+
+###### 颜色如何转换成法线向量
+RGB颜色数据的范围是`(0, 0, 0 )` 到 `(1,1,1)`，所以要把它转换成法线向量，需要所有元素乘以2再减去1，这样取值范围就变成了`(-1, -1, -1 )` 到 `(1,1,1)`，这是规范化后的向量该有的取值范围。那么这个时候是不是就能直接使用它计算光照强度了呢？
+
+###### 法线空间
+通过颜色转换过来的法线向量并不是世界空间的向量，不能直接用来计算光照。那么什么是世界空间？我们通过一个1维的例子来解释一下。下面是一个数轴，中间是原点，点A的坐标是3。我们可以称坐标3是A在世界空间的坐标。世界空间就是没有经过任何变换的数轴形成的坐标系统。
+![](http://upload-images.jianshu.io/upload_images/2949750-b596f122c33c1ad6.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+
+
+我们增加点B，它在世界空间的坐标是7，如果此时我们将A设置为原点，那么B的坐标就变成了4。我们可以说B在点A物体空间的坐标是4。我们通过B在点A物体空间中的坐标和A在世界空间的坐标就可以计算出点B在世界空间的坐标7。
+
+![](http://upload-images.jianshu.io/upload_images/2949750-be3f26291a45fa11.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+
+
+
+我们回到3D世界，每个顶点都有一个对应的法线，我们可以使用这个法线向量和它的两个切线向量形成一个法线空间。通过颜色转换过来的法线向量正是相对于这个法线空间的值。我们使用相对于法线空间的向量值和法线空间相对于世界空间的变换就可以计算出最终的法线向量了。我们可以把通过颜色转换过来的法线向量看做上面点B在点A物体空间的坐标，法线空间则看做点A在世界空间的变换，最后计算出点B在世界空间的坐标。
+![](http://upload-images.jianshu.io/upload_images/2949750-0eb7f8abdc8f54db.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+
+###### 计算法线空间变换
+想要计算法线空间的变换需要一个法线，两个互相垂直的切线。切线和法线是垂直的，所以一个法线可以有很多个切线，为了产生较好的效果，我们选择沿着UV方向的切线。如下图所示，第一个切线`Tangent`沿着U，第二个切线`Bitangent`沿着V。`(UX, VX)`是各个点的UV坐标，`Line10`是`P0`到`P1`的向量。`Line20`是`P0`到`P2`的向量。他们满足下面的公式。
+```
+Line10 = (U1 - U0) * Tangent + (V1 - V0) * Bitangent
+Line20 = (U2 - U0) * Tangent + (V2 - V0) * Bitangent
+```
+
+![](http://upload-images.jianshu.io/upload_images/2949750-21f2e12f62b4cf05.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+
+
+我们将`U1 - U0`记做`ΔU1`,`V1 - V0`记做`ΔV1`，`U2 - U0`记做`ΔU2`,`V2 - V0`记做`ΔV2`。最终可以推导出下面的公式。
+![](http://upload-images.jianshu.io/upload_images/2949750-676e7140e761a672.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+
+求解出`Tangent`和`Bitangent`后就可以将它们和法线组成法线空间变换TBN了，T是`Tangent`，B是`Bitangent`，N是`Normal`。
+![](http://upload-images.jianshu.io/upload_images/2949750-685d2881b004df1d.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+
+了解完法线贴图的基础知识后，现在我们来开始实践部分。为了实现法线贴图，Shader需要做哪些事情呢？
+
+> 因为法线贴图一般只对原有法线进行比较小的扰动，所以大部分的值在法线空间中z轴上分量比较多，z轴会被写到rgb的blue分量中，所以法线贴图会呈现出蓝色的主色调。
+
+#### 在Shader中如何使用法线贴图
+首先需要在Vertex Shader中增加两个切线的`attribute`，并把他们传递给Fragment Shader。
+```
+attribute vec3 tangent;
+attribute vec3 bitangent;
+...
+varying vec3 fragTangent;
+varying vec3 fragBitangent;
+...
+void main(void) {
+     ...
+    fragTangent = tangent;
+    fragBitangent = bitangent;
+    gl_Position = mvp * position;
+}
+```
+在Fragment Shader中需要做一下几件事。
+* 添加接受法线贴图的uniform，`uniform sampler2D normalMap;`
+* 将法线和切线都使用`normalMatrix`进行变换，从而变换到世界空间。
+```
+vec3 transformedNormal = normalize((normalMatrix * vec4(fragNormal, 1.0)).xyz);
+vec3 transformedTangent = normalize((normalMatrix * vec4(fragTangent, 1.0)).xyz);
+vec3 transformedBitangent = normalize((normalMatrix * vec4(fragBitangent, 1.0)).xyz);
+```
+* 使用法线和切线组成TBN矩阵。
+```
+    mat3 TBN = mat3(
+                              transformedTangent,
+                              transformedBitangent,
+                              transformedNormal
+                              );
+```
+* 取出法线贴图的值并使用TBN变换。
+```
+vec3 normalFromMap = (texture2D(normalMap, fragUV).rgb * 2.0 - 1.0);
+transformedNormal = TBN * normalFromMap;
+```
+接下来就是和以前一样的流程了，使用`transformedNormal`参与你的光照模型的计算。
+
+#### 为顶点计算切线
+我只在WavefrontObj类中实现了切线的计算，所有的生成代码如下。
+```
+- (void)decompressToVertexArray {
+    NSInteger vertexCount = self.positionIndexData.length / sizeof(GLuint);
+    NSInteger triangleCount = vertexCount / 3;
+    for (int triangleIndex = 0; triangleIndex < triangleCount; ++triangleIndex) {
+        GLKVector3 positions[3];
+        GLKVector2 uvs[3];
+        GLKVector3 normals[3];
+        for (int vertexIndex = triangleIndex * 3; vertexIndex < triangleIndex * 3 + 3; ++vertexIndex) {
+            int positionIndex = 0;
+            [self.positionIndexData getBytes:&positionIndex range:NSMakeRange(vertexIndex * sizeof(GLuint), sizeof(GLuint))];
+            [self.positionData getBytes:&positions[vertexIndex % 3] range:NSMakeRange(positionIndex * 3 * sizeof(GLfloat), 3 * sizeof(GLfloat))];
+            
+            int normalIndex = 0;
+            [self.normalIndexData getBytes:&normalIndex range:NSMakeRange(vertexIndex * sizeof(GLuint), sizeof(GLuint))];
+            [self.normalData getBytes:&normals[vertexIndex % 3] range:NSMakeRange(normalIndex * 3 * sizeof(GLfloat), 3 * sizeof(GLfloat))];
+            
+            int uvIndex = 0;
+            [self.uvIndexData getBytes:&uvIndex range:NSMakeRange(vertexIndex * sizeof(GLuint), sizeof(GLuint))];
+            [self.uvData getBytes:&uvs[vertexIndex % 3] range:NSMakeRange(uvIndex * 2 * sizeof(GLfloat), 2 * sizeof(GLfloat))];
+        }
+        GLKVector3 deltaPos1 = GLKVector3Subtract(positions[1], positions[0]);
+        GLKVector3 deltaPos2 = GLKVector3Subtract(positions[2], positions[0]);
+        GLKVector2 deltaUV1 = GLKVector2Subtract(uvs[1], uvs[0]);
+        GLKVector2 deltaUV2 = GLKVector2Subtract(uvs[2], uvs[0]);
+        float r = 1.0f / (deltaUV1.x * deltaUV2.y - deltaUV1.y * deltaUV2.x);
+        
+        GLKVector3 tangent = GLKVector3MultiplyScalar(GLKVector3Subtract(GLKVector3MultiplyScalar(deltaPos1, deltaUV2.y), GLKVector3MultiplyScalar(deltaPos2, deltaUV1.y)), r);
+        GLKVector3 bitangent = GLKVector3MultiplyScalar(GLKVector3Subtract(GLKVector3MultiplyScalar(deltaPos2, deltaUV1.x), GLKVector3MultiplyScalar(deltaPos1, deltaUV2.x)), r);
+        
+        for (int i = 0; i< 3; ++i) {
+            [self.vertexData appendBytes:&positions[i] length:sizeof(GLKVector3)];
+            [self.vertexData appendBytes:&normals[i] length:sizeof(GLKVector3)];
+            [self.vertexData appendBytes:&uvs[i] length:sizeof(GLKVector2)];
+            [self.vertexData appendBytes:&tangent length:sizeof(GLKVector3)];
+            [self.vertexData appendBytes:&bitangent length:sizeof(GLKVector3)];
+        }
+    }
+}
+```
+以三角形为基本单位，计算它的两根切线。下面的deltaPos1对应Line10，deltaPos2对应Line20，deltaUV1和deltaUV2则是UV上的差值，读者可以对应公式理解这里的代码。
+![](http://upload-images.jianshu.io/upload_images/2949750-676e7140e761a672.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+```
+GLKVector3 deltaPos1 = GLKVector3Subtract(positions[1], positions[0]);
+GLKVector3 deltaPos2 = GLKVector3Subtract(positions[2], positions[0]);
+GLKVector2 deltaUV1 = GLKVector2Subtract(uvs[1], uvs[0]);
+GLKVector2 deltaUV2 = GLKVector2Subtract(uvs[2], uvs[0]);
+float r = 1.0f / (deltaUV1.x * deltaUV2.y - deltaUV1.y * deltaUV2.x);
+        
+GLKVector3 tangent = GLKVector3MultiplyScalar(GLKVector3Subtract(GLKVector3MultiplyScalar(deltaPos1, deltaUV2.y), GLKVector3MultiplyScalar(deltaPos2, deltaUV1.y)), r);
+GLKVector3 bitangent = GLKVector3MultiplyScalar(GLKVector3Subtract(GLKVector3MultiplyScalar(deltaPos2, deltaUV1.x), GLKVector3MultiplyScalar(deltaPos1, deltaUV2.x)), r);
+    
+```
+下面是2x2和2x3矩阵的乘法规律，读者可以参考下。
+![](http://upload-images.jianshu.io/upload_images/2949750-4456808a003373bc.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+
+切线计算完后，我们将两根切线放到顶点数据中。
+```
+for (int i = 0; i< 3; ++i) {
+    [self.vertexData appendBytes:&positions[i] length:sizeof(GLKVector3)];
+    [self.vertexData appendBytes:&normals[i] length:sizeof(GLKVector3)];
+    [self.vertexData appendBytes:&uvs[i] length:sizeof(GLKVector2)];
+    [self.vertexData appendBytes:&tangent length:sizeof(GLKVector3)];
+    [self.vertexData appendBytes:&bitangent length:sizeof(GLKVector3)];
+}
+```
+
+#### 修改顶点数据结构
+我们可以发现，现在的顶点数据改变了，新增了两根法线，所以绑定VAO的代码也需要改变，下面是WavefrontObj新的`genVAO`代码。
+```
+- (void)genVAO {
+    glGenVertexArraysOES(1, &vao);
+    glBindVertexArrayOES(vao);
+    
+    glBindBuffer(GL_ARRAY_BUFFER, vertexVBO);
+    
+    GLuint positionAttribLocation = glGetAttribLocation(self.context.program, "position");
+    glEnableVertexAttribArray(positionAttribLocation);
+    GLuint colorAttribLocation = glGetAttribLocation(self.context.program, "normal");
+    glEnableVertexAttribArray(colorAttribLocation);
+    GLuint uvAttribLocation = glGetAttribLocation(self.context.program, "uv");
+    glEnableVertexAttribArray(uvAttribLocation);
+    GLuint tangentAttribLocation = glGetAttribLocation(self.context.program, "tangent");
+    glEnableVertexAttribArray(tangentAttribLocation);
+    GLuint bitangentAttribLocation = glGetAttribLocation(self.context.program, "bitangent");
+    glEnableVertexAttribArray(bitangentAttribLocation);
+    
+    glVertexAttribPointer(positionAttribLocation, 3, GL_FLOAT, GL_FALSE, 14 * sizeof(GLfloat), (char *)NULL);
+    glVertexAttribPointer(colorAttribLocation, 3, GL_FLOAT, GL_FALSE, 14 * sizeof(GLfloat), (char *)NULL + 3 * sizeof(GLfloat));
+    glVertexAttribPointer(uvAttribLocation, 2, GL_FLOAT, GL_FALSE, 14 * sizeof(GLfloat), (char *)NULL + 6 * sizeof(GLfloat));
+    glVertexAttribPointer(tangentAttribLocation, 3, GL_FLOAT, GL_FALSE, 14 * sizeof(GLfloat), (char *)NULL + 8 * sizeof(GLfloat));
+    glVertexAttribPointer(bitangentAttribLocation, 3, GL_FLOAT, GL_FALSE, 14 * sizeof(GLfloat), (char *)NULL + 11 * sizeof(GLfloat));
+    
+    glBindVertexArrayOES(0);
+}
+```
+每个顶点的数据长度变为了14个GLfloat的长度，新增了2个切线属性的绑定，对应着我们在Vertex Shader中新增的两个属性。
+
+#### 贴图绑定
+我们在WavefrontObj的`- (void)draw:(GLContext *)glContext`中增加了法线贴图的绑定。
+```
+[glContext bindTexture:self.diffuseMap to:GL_TEXTURE0 uniformName:@"diffuseMap"];
+[glContext bindTexture:self.normalMap to:GL_TEXTURE1 uniformName:@"normalMap"];
+```
+我们把漫反射贴图绑定到纹理0通道，法线贴图绑定到纹理1通道。
+
+最后我们在ViewController中创建一个来自Obj文件的Cube模型，并给与它木箱的漫反射贴图和法线贴图。
+```
+- (void)createMonkeyFromObj {
+    UIImage *normalImage = [UIImage imageNamed:@"normal.png"];
+    GLKTextureInfo *normalMap = [GLKTextureLoader textureWithCGImage:normalImage.CGImage options:nil error:nil];
+    UIImage *diffuseImage = [UIImage imageNamed:@"texture.jpg"];
+    GLKTextureInfo *diffuseMap = [GLKTextureLoader textureWithCGImage:diffuseImage.CGImage options:nil error:nil];
+    
+    NSString *objFilePath = [[NSBundle mainBundle] pathForResource:@"cube" ofType:@"obj"];
+    self.carModel = [WavefrontOBJ objWithGLContext:self.glContext objFile:objFilePath diffuseMap:diffuseMap normalMap:normalMap];
+    self.carModel.modelMatrix = GLKMatrix4MakeRotation(- M_PI / 2.0, 0, 1, 0);
+    [self.objects addObject:self.carModel];
+}
+```
+
+> 为了方便查看纹理贴图的效果，我增加了uniform `useNormalMap`来开启和关闭法线贴图。
+
+下面是最终运行效果。
+
+![](http://upload-images.jianshu.io/upload_images/2949750-b0dd54e2cd211e0d.jpg?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)

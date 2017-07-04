@@ -1,0 +1,350 @@
+---
+layout: post
+title: 激光特效
+date: 2017-07-03 19:42:00 +0800
+categories: 学习OpenGLES系列文章
+---
+
+> 本文所用的代码在`https://github.com/SquarePants1991/OpenGLESLearn.git`的`laser`分支中。
+
+本文主要介绍如何使用2个四边形实现一个简单的激光效果。下面是最终效果图。
+![](http://upload-images.jianshu.io/upload_images/2949750-afcd970ea1f0b1c9.gif?imageMogr2/auto-orient/strip)
+在了解激光实现原理之前，先介绍一下我对上一篇文章的代码进行的简单重构。我把OpenGL关键性的代码都集成到了`GLContext`类中。
+```
+#import <GLKit/GLKit.h>
+
+@interface GLContext : NSObject
+@property (assign, nonatomic) GLuint program;
++ (id)contextWithVertexShaderPath:(NSString *)vertexShaderPath fragmentShaderPath:(NSString *)fragmentShaderPath;
+- (id)initWithVertexShader:(NSString *)vertexShader fragmentShader:(NSString *)fragmentShader;
+- (void)active;
+
+/// draw functions
+- (void)drawTriangles:(GLfloat *)triangleData vertexCount:(GLint)vertexCount;
+
+/// uniform setters
+- (void)setUniform1i:(NSString *)uniformName value:(GLint)value;
+- (void)setUniform1f:(NSString *)uniformName value:(GLfloat)value;
+- (void)setUniform3fv:(NSString *)uniformName value:(GLKVector3)value;
+- (void)setUniformMatrix4fv:(NSString *)uniformName value:(GLKMatrix4)value;
+
+/// texture
+- (void)bindTexture:(GLKTextureInfo *)textureInfo to:(GLenum)textureChannel uniformName:(NSString *)uniformName;
+
+@end
+```
+这个类可以做以下事情：
+1. 编译链接Shader，生成`program`。
+1. 调用`active`激活`GLContext`中的`program`。
+1. 使用`drawTriangles`绘制三角形，后面会增加绘制三角带，线和点等等。
+1. `setUniformXXX`系列方法用来设置各种`uniform`的值。当然还可以增加更多。
+1. `bindTexture`用来绑定纹理到指定通道。
+
+有了这个类之后，我们可以为不同的Shader建立不同的`GLContext`，这就意味着我们可以方便的在同一场景使用不同的Shader渲染不同的物体。`GLContext`的实现代码都是之前已有的代码，比较简单就不详述了。
+回到激光特效实现的原理， 开头说到它是由两个四边形组成的，具体的形状如下。
+
+![](http://upload-images.jianshu.io/upload_images/2949750-df3b36b49ca3d917.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+两个四边形垂直相交，然后分别为他们加上一张纹理图。
+![](http://upload-images.jianshu.io/upload_images/2949750-05f2cefbe9a15ca4.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+渲染这两个四边形时，不能够使用前面介绍的光照模型，在Fragment Shader中直接返回纹理色即可，所以我们可以为激光单独创建一个Fragment Shader。
+```
+precision highp float;
+
+varying vec2 fragUV;
+
+uniform sampler2D diffuseMap;
+uniform float life; // max: 1, min: 0
+uniform float hue;
+
+#define Max(a, b) (a > b ? a : b)
+#define Min(a, b) (a < b ? a : b)
+
+float hue2rgb(float p, float q, float t) {
+    if(t < 0.0) t += 1.0;
+    if(t > 1.0) t -= 1.0;
+    if(t < 1.0/6.0) return p + (q - p) * 6.0 * t;
+    if(t < 1.0/2.0) return q;
+    if(t < 2.0/3.0) return p + (q - p) * (2.0/3.0 - t) * 6.0;
+    return p;
+}
+
+vec3 hslToRgb(float h, float s, float l){
+    float r, g, b;
+    if(s == 0.0){
+        r = g = b = l; // achromatic
+    }else{
+        float q = l < 0.5 ? l * (1.0 + s) : l + s - l * s;
+        float p = 2.0 * l - q;
+        r = hue2rgb(p, q, h + 1.0/3.0);
+        g = hue2rgb(p, q, h);
+        b = hue2rgb(p, q, h - 1.0/3.0);
+    }
+
+    return vec3(r, g, b);
+}
+
+vec3 rgbToHsl(float r, float g, float b) {
+    float max = Max(r, Max(g, b));
+    float min = Min(r, Min(g, b));
+    float h, s, l = (max + min) / 2.0;
+
+    if(max == min){
+        h = s = 0.0; // achromatic
+    }else{
+        float d = max - min;
+        s = l > 0.5 ? d / (2.0 - max - min) : d / (max + min);
+        if (max == r) h = (g - b) / d + (g < b ? 6.0 : 0.0);
+        if (max == g) h = (b - r) / d + 2.0;
+        if (max == b) h = (r - g) / d + 4.0;
+        h /= 6.0;
+    }
+
+    return vec3(h, s, l);
+}
+
+void main(void) {
+    float v = (fragUV.y > 0.05 && fragUV.y < 0.95) ? 0.5 : fragUV.y;
+    vec4 materialColor = texture2D(diffuseMap, vec2(fragUV.x, v));
+    vec3 hsl = rgbToHsl(materialColor.x, materialColor.y, materialColor.z);
+    hsl.x = hue;
+    vec3 rgb = hslToRgb(hsl.x, hsl.y, hsl.z);
+    gl_FragColor = vec4(rgb, materialColor.a * life);
+}
+```
+看起来很长，因为除了实现读取纹理色之外，还实现了变色，渐隐渐现，防止拉伸过渡等功能。下面我来逐一解释这些功能。
+
+#### 渐隐渐现
+该功能主要依靠`uniform float life;`实现，`life`的值从0到1。`gl_FragColor = vec4(rgb, materialColor.a * life);`所以最后相乘等到的颜色也是从全透明到原本的颜色，从而实现了渐隐渐现的效果。
+
+#### 变色
+例子中贴图的颜色是蓝色的，为了不做更多颜色的贴图却可以实现不同颜色的激光效果，这里将颜色从RGB空间转换为HSL空间，然后根据`uniform float hue;`调整HSL的第一个组件值Hue就可以调整颜色了，更多关于HSL的知识可以看[百度百科](http://baike.baidu.com/link?url=sjNIht_UbG-Tz1BgtjVASBtQ-SdD7nrtCzt55d2dyN4xrzCuiufR0OXPlntkCo3ZE5mucLgbpts0e7RFlGoGsq)。相关代码如下。
+```
+uniform float hue;
+
+#define Max(a, b) (a > b ? a : b)
+#define Min(a, b) (a < b ? a : b)
+
+float hue2rgb(float p, float q, float t) {
+    if(t < 0.0) t += 1.0;
+    if(t > 1.0) t -= 1.0;
+    if(t < 1.0/6.0) return p + (q - p) * 6.0 * t;
+    if(t < 1.0/2.0) return q;
+    if(t < 2.0/3.0) return p + (q - p) * (2.0/3.0 - t) * 6.0;
+    return p;
+}
+
+vec3 hslToRgb(float h, float s, float l){
+    float r, g, b;
+    if(s == 0.0){
+        r = g = b = l; // achromatic
+    }else{
+        float q = l < 0.5 ? l * (1.0 + s) : l + s - l * s;
+        float p = 2.0 * l - q;
+        r = hue2rgb(p, q, h + 1.0/3.0);
+        g = hue2rgb(p, q, h);
+        b = hue2rgb(p, q, h - 1.0/3.0);
+    }
+
+    return vec3(r, g, b);
+}
+
+vec3 rgbToHsl(float r, float g, float b) {
+    float max = Max(r, Max(g, b));
+    float min = Min(r, Min(g, b));
+    float h, s, l = (max + min) / 2.0;
+
+    if(max == min){
+        h = s = 0.0; // achromatic
+    }else{
+        float d = max - min;
+        s = l > 0.5 ? d / (2.0 - max - min) : d / (max + min);
+        if (max == r) h = (g - b) / d + (g < b ? 6.0 : 0.0);
+        if (max == g) h = (b - r) / d + 2.0;
+        if (max == b) h = (r - g) / d + 4.0;
+        h /= 6.0;
+    }
+
+    return vec3(h, s, l);
+}
+void main(void) {
+...
+    vec3 hsl = rgbToHsl(materialColor.x, materialColor.y, materialColor.z);
+    hsl.x = hue;
+    vec3 rgb = hslToRgb(hsl.x, hsl.y, hsl.z);
+...
+}
+```
+
+> HSL代表色相(H)、饱和度(S)、明度(L)，其中色相是控制颜色的主要组件。
+
+#### 防止过度拉伸
+这行代码主要就是防止贴图在y方向上过度拉伸，对于大于0.05小于0.95的值一律都按照0.5处理，当然也可以为x方向做同样的处理。这个和日常App开发中九宫格的原理是类似的。
+```
+float v = (fragUV.y > 0.05 && fragUV.y < 0.95) ? 0.5 : fragUV.y;
+```
+以上就是为激光编写的Fragment Shader，至于Vertex Shader，还可以复用原来的。回到OC代码。首先为激光的Shader创建`GLContext`。
+```
+- (void)prepareLaserGLContext {
+    NSString *vertexShaderPath = [[NSBundle mainBundle] pathForResource:@"vertex" ofType:@".glsl"];
+    NSString *fragmentShaderPath = [[NSBundle mainBundle] pathForResource:@"frg_laser" ofType:@".glsl"];
+    self.laserContext = [GLContext contextWithVertexShaderPath:vertexShaderPath fragmentShaderPath:fragmentShaderPath];
+}
+```
+接着，在绘制代码中就可以使用`GLContext`的相关方法代替原有的绘制代码了。
+```
+- (void)glkView:(GLKView *)view drawInRect:(CGRect)rect {
+    [super glkView:view drawInRect:rect];
+
+    [self.laserContext active];
+    [self.laserContext setUniform1f:@"elapsedTime" value:(GLfloat)self.elapsedTime];
+    [self.laserContext setUniformMatrix4fv:@"projectionMatrix" value:self.projectionMatrix];
+    [self.laserContext setUniformMatrix4fv:@"cameraMatrix" value:self.cameraMatrix];
+
+    [self.laserContext setUniform3fv:@"lightDirection" value:self.lightDirection];
+
+    [self.lasers enumerateObjectsUsingBlock:^(Laser *obj, NSUInteger idx, BOOL *stop) {
+        [obj draw:self.laserContext];
+    }];
+}
+```
+为了让创建多个激光变得简单，我将激光的相关方法封装到了Laser类中。我们在`ViewController`中要做的事情就是实例化多个Laser。并且在`update`中更新他们的状态。
+```
+- (void)prepareLasers {
+    Laser *laser = [[Laser alloc] initWithLaserImage:[UIImage imageNamed:@"laser.png"]];
+    laser.position = GLKVector3Make(0, 0, -40);
+    laser.direction = GLKVector3Make(0.08, 0.08, 1);
+    laser.length = 60;
+    laser.radius = 1;
+    [self.lasers addObject:laser];
+
+    laser = [[Laser alloc] initWithLaserImage:[UIImage imageNamed:@"laser.png"]];
+    laser.position = GLKVector3Make(0, 0, -40);
+    laser.direction = GLKVector3Make(-0.08, -0.08, 1);
+    laser.length = 60;
+    laser.radius = 1;
+    [self.lasers addObject:laser];
+
+    laser = [[Laser alloc] initWithLaserImage:[UIImage imageNamed:@"laser.png"]];
+    laser.position = GLKVector3Make(0, 0, -40);
+    laser.direction = GLKVector3Make(-0.08, -0.08, 1);
+    laser.length = 60;
+    laser.radius = 1;
+    [self.lasers addObject:laser];
+
+    laser = [[Laser alloc] initWithLaserImage:[UIImage imageNamed:@"laser.png"]];
+    laser.position = GLKVector3Make(0, 0, -40);
+    laser.direction = GLKVector3Make(-0.08, -0.08, 1);
+    laser.length = 60;
+    laser.radius = 1;
+    [self.lasers addObject:laser];
+}
+
+- (void)update {
+    [super update];
+    [self.lasers enumerateObjectsUsingBlock:^(Laser *obj, NSUInteger idx, BOOL *stop) {
+        [obj update:self.timeSinceLastUpdate];
+    }];
+}
+```
+最后我们来看看Laser类中的具体实现。
+```
+#import <GLKit/GLKit.h>
+
+@class GLContext;
+
+@interface Laser : NSObject
+@property (assign, nonatomic) GLfloat life;
+@property (assign, nonatomic) GLKVector3 position;
+@property (assign, nonatomic) GLKVector3 direction;
+@property (assign, nonatomic) float length;
+@property (assign, nonatomic) float radius;
+
+- (id)initWithLaserImage:(UIImage *)image;
+- (void)update:(NSTimeInterval)timeSinceLastUpdate;
+- (void)draw:(GLContext *)glContext;
+@end
+```
+`life`就是之前提到的控制渐隐渐现的参数，`position`表示激光发射的位置，`direction`表示激光发射的方向，`length`是长度，`radius`是直径。初始化的时候将纹理图片传入即可。
+
+在`update`中计算对应的`modelMatrix`。
+```
+- (void)update:(NSTimeInterval)timeSinceLastUpdate {
+    self.life -= timeSinceLastUpdate;
+    if (self.life <= 0) {
+        self.life = 1;
+        float x = rand() / (float)RAND_MAX * 0.1 - 0.05;
+        float y = rand() / (float)RAND_MAX * 0.1 - 0.05;
+        self.direction = GLKVector3Normalize(GLKVector3Make(x, y, 1));
+        self.hue = rand() / (float)RAND_MAX * 1.0;
+    }
+
+    GLKVector3 defaultForward = GLKVector3Make(0, 0, 1);
+    GLKVector3 rotateAxis = GLKVector3CrossProduct(defaultForward, self.direction);
+    float cosAngle = GLKVector3DotProduct(defaultForward, self.direction);
+    float angle = acos(cosAngle);
+
+    GLKMatrix4 scaleMatrix = GLKMatrix4MakeScale(self.length, self.radius, self.radius);
+    GLKMatrix4 rotateToZMatrix = GLKMatrix4MakeRotation(M_PI / 2, 0, 1, 0);
+    GLKMatrix4 translateMatrix = GLKMatrix4MakeTranslation(0, 0, self.length / 2);
+    GLKMatrix4 rotateMatrix = GLKMatrix4MakeRotation(angle, rotateAxis.x, rotateAxis.y, rotateAxis.z);
+    GLKMatrix4 positionTranslateMatrix = GLKMatrix4MakeTranslation(self.position.x, self.position.y, self.position.z);
+    self.modelMatrix = GLKMatrix4Multiply(rotateToZMatrix, scaleMatrix);
+    self.modelMatrix = GLKMatrix4Multiply(translateMatrix, self.modelMatrix);
+    self.modelMatrix = GLKMatrix4Multiply(rotateMatrix, self.modelMatrix);
+    self.modelMatrix = GLKMatrix4Multiply(positionTranslateMatrix, self.modelMatrix);
+}
+```
+上面的代码在每一次life小于等于0时，重置激光方向和色相Hue。计算`modelMatrix`的步骤如下：
+1. 根据方向计算旋转轴和旋转角。
+1. 计算缩放矩阵`scaleMatrix `将激光缩放到长`self.length`，直径`self.radius`。
+1. 因为默认较长的方向是x轴，所以再计算旋转到z轴的旋转矩阵`rotateToZMatrix `。
+1. 旋转到z轴后，将一端移至`(0,0,0)`点，计算出`translateMatrix `。
+1. 在根据刚开始计算的旋转角和旋转轴计算旋转矩阵`rotateMatrix `。
+1. 最后计算将激光移至`self.position`的矩阵`positionTranslateMatrix `。
+
+将上述矩阵相乘即可得到`modelMatrix`，注意是从下往上乘。
+
+具体的绘制代码如下。`life`和`hue`都在`- (void)draw:(GLContext *)glContext`里传递给了Shader。`- (void)drawLaser:(GLContext *)glContext`中绘制了两个垂直平面，并且在绘制过程中禁用了`DepthMask`。
+```
+- (void)draw:(GLContext *)glContext {
+    [glContext setUniformMatrix4fv:@"modelMatrix" value:self.modelMatrix];
+    bool canInvert;
+    GLKMatrix4 normalMatrix = GLKMatrix4InvertAndTranspose(self.modelMatrix, &canInvert);
+    [glContext setUniformMatrix4fv:@"normalMatrix" value:canInvert ? normalMatrix : GLKMatrix4Identity];
+
+    [glContext setUniform1f:@"life" value:self.life];
+    [glContext bindTexture:self.diffuseTexture to:GL_TEXTURE0 uniformName:@"diffuseMap"];
+    [glContext setUniform1f:@"hue" value:self.hue];
+
+    [self drawLaser: glContext];
+}
+
+- (void)drawLaser:(GLContext *)glContext{
+    glDepthMask(GL_FALSE);
+
+    static GLfloat plane1[] = {
+        -0.5, 0.5f, 0, 1, 0, 0,     1, 0, // x, y, z, r, g, b,每一行存储一个点的信息，位置和颜色
+        -0.5f, -0.5f, 0, 0, 1, 0,   0, 0,
+        0.5f, -0.5f, 0, 0, 0, 1,    0, 1,
+        0.5, -0.5f, 0, 0, 0, 1,     0, 1,
+        0.5f, 0.5f, 0, 0, 1, 0,     1, 1,
+        -0.5f, 0.5f, 0, 1, 0, 0,    1, 0,
+    };
+    [glContext drawTriangles:plane1 vertexCount:6];
+    
+    static GLfloat plane2[] = {
+        -0.5,0, 0.5f,  1, 0, 0,     1, 0, // x, y, z, r, g, b,每一行存储一个点的信息，位置和颜色
+        -0.5f,0, -0.5f,  0, 1, 0,   0, 0,
+        0.5f, 0, -0.5f, 0, 0, 1,    0, 1,
+        0.5,0, -0.5f,  0, 0, 1,     0, 1,
+        0.5f, 0, 0.5f, 0, 1, 0,     1, 1,
+        -0.5f, 0,0.5f,  1, 0, 0,    1, 0,
+    };
+    [glContext drawTriangles:plane2 vertexCount:6];
+
+    glDepthMask(GL_TRUE);
+}
+```
+> 本文的例子中使用的BlendFunc是`glBlendFunc (GL_SRC_ALPHA, GL_DST_ALPHA);`，这种混合方式可以让激光显得更明亮一些。
+
+到此，激光的效果就介绍完了，这个效果涉及到了之前大部分的知识，算是一个阶段性总结了吧。

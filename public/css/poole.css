@@ -54,7 +54,7 @@ html {
 }
 @media (min-width: 38em) {
   html {
-    font-size: 20px;
+    font-size: 17px;
   }
 }
 
@@ -150,7 +150,7 @@ abbr[title] {
 /* Code */
 code,
 pre {
-  font-family: Menlo, Monaco, "Courier New", monospace;
+  font-family: Monaco, Menlo, "Courier New", monospace;
 }
 code {
   padding: .25em .5em;
@@ -171,6 +171,8 @@ pre {
   word-break: break-all;
   word-wrap: break-word;
   background-color: #f9f9f9;
+  white-space: pre; 
+  overflow: auto;
 }
 pre code {
   padding: 0;

@@ -1,15 +1,15 @@
+{% assign sortedposts = site.posts | sort 'date' 'first'%}
 {% for category in site.categories %}
+  {% assign category_name = category | first %}
   <div>
   	<a href="https://github.com/SquarePants1991/OpenGLESLearn">
   		<h2 name="{{ category | first }}">{{ category | first}}</h2>
   	</a>
     <ul>
-    {% for posts in category %}
-      {% for post in posts %}
-      	{% if post.url %}
+    {% for post in sortedposts %}
+       {% if post.url and post.categories contains category_name %}
         <li><a href="{{ post.url }}">{{ post.title }}</a></li>
         {% endif %}
-      {% endfor %}
     {% endfor %}
     </ul>
   </div>

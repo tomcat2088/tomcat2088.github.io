@@ -1,0 +1,98 @@
+---
+layout: post
+title: 透视和正交投影
+date: 2017-07-03 19:41:24 +0800
+categories: 学习OpenGLES系列文章
+---
+
+> 本文所用的代码在`https://github.com/SquarePants1991/OpenGLESLearn.git`的`chapter6`分支中。
+
+上一篇介绍了变换矩阵，本篇将介绍两个重要的变换矩阵，透视投影矩阵和正交投影矩阵。在介绍代码之前，先来简单介绍一下这两个矩阵的作用。
+##### 透视投影矩阵
+主要作用是模仿人眼观察3D世界的规律，让物体近大远小，所以被称为透视。
+##### 正交投影矩阵
+主要作用是将坐标系映射到其他大小，主要用于2D UI绘制。
+
+接下来我们就结合代码和效果深入了解这两个矩阵。我沿用了上一篇的代码，只修改了两处。`update`中使用透视和正交投影，并配合一些平移，旋转，缩放实现了本例中的效果。`drawTriangle`中修改了顶点数据，将绘制的菱形改成了矩形，方便观察效果。
+```
+- (void)update {
+    [super update];
+    float varyingFactor = self.elapsedTime;
+    
+    GLKMatrix4 rotateMatrix = GLKMatrix4MakeRotation(varyingFactor, 0, 1, 0);
+//#define UsePerspective // 注释这行运行查看正交投影效果，解除注释运行查看透视投影效果
+#ifdef UsePerspective
+    // 透视投影
+    float aspect = self.view.frame.size.width / self.view.frame.size.height;
+    GLKMatrix4 perspectiveMatrix = GLKMatrix4MakePerspective(GLKMathDegreesToRadians(90), aspect, 0.1, 10.0);
+    GLKMatrix4 translateMatrix = GLKMatrix4MakeTranslation(0, 0, -1.6);
+    self.transformMatrix = GLKMatrix4Multiply(translateMatrix, rotateMatrix);
+    self.transformMatrix = GLKMatrix4Multiply(perspectiveMatrix, self.transformMatrix);
+#else
+    // 正交投影
+    float viewWidth = self.view.frame.size.width;
+    float viewHeight = self.view.frame.size.height;
+    GLKMatrix4 orthMatrix = GLKMatrix4MakeOrtho(-viewWidth/2, viewWidth/2, -viewHeight / 2, viewHeight/2, -10, 10);
+    GLKMatrix4 scaleMatrix = GLKMatrix4MakeScale(200, 200, 200);
+    self.transformMatrix = GLKMatrix4Multiply(scaleMatrix, rotateMatrix);
+    self.transformMatrix = GLKMatrix4Multiply(orthMatrix, self.transformMatrix);
+#endif
+    
+}
+```
+```
+- (void)drawTriangle {
+    static GLfloat triangleData[36] = {
+        -0.5,   0.5f,  0,   1,  0,  0, // x, y, z, r, g, b,每一行存储一个点的信息，位置和颜色
+        -0.5f,  -0.5f,  0,  0,  1,  0,
+        0.5f,   -0.5f,  0,  0,  0,  1,
+        0.5,    -0.5f, 0,   0,  0,  1,
+        0.5f,  0.5f,  0,    0,  1,  0,
+        -0.5f,   0.5f,  0,  1,  0,  0,
+    };
+    [self bindAttribs:triangleData];
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+}
+```
+## 透视投影
+这是使用透视投影的全部代码。
+```
+ // 透视投影
+    float aspect = self.view.frame.size.width / self.view.frame.size.height;
+    GLKMatrix4 perspectiveMatrix = GLKMatrix4MakePerspective(GLKMathDegreesToRadians(90), aspect, 0.1, 10.0);
+    GLKMatrix4 translateMatrix = GLKMatrix4MakeTranslation(0, 0, -1.6);
+    self.transformMatrix = GLKMatrix4Multiply(translateMatrix, rotateMatrix);
+    self.transformMatrix = GLKMatrix4Multiply(perspectiveMatrix, self.transformMatrix);
+```
+
+> GLKMathDegreesToRadians是将角度转换成弧度
+
+GLKit提供了`GLKMatrix4MakePerspective`方法便捷的生成透视投影矩阵。方法有4个参数`float fovyRadians, float aspect, float nearZ, float farZ`。`fovyRadians`表示视角。`aspect`表示屏幕宽高比，为了将所有轴的单位长度统一，所以需要知道屏幕宽高比多少。`nearZ`表示可视范围在Z轴的起点到原点(0,0,0)的距离，`farZ`表示可视范围在Z轴的终点到原点(0,0,0)的距离,`nearZ`和`farZ`始终为正。下面是透视投影的剖面示意图。
+
+
+![](http://upload-images.jianshu.io/upload_images/2949750-002f85a887f25f78.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+
+
+透视投影矩阵默认的可视方向是向Z轴的反方向生长的。视角（fovyRadians）越大，看到的东西就越多。只有在nearZ和farZ两个平面范围内的点才会被投影到屏幕上，当然这些点也必须在视角的范围内。根据上面的条件，一个位于z=0上的点是不能被投影到屏幕的，所以我增加了一个平移矩阵` GLKMatrix4 translateMatrix = GLKMatrix4MakeTranslation(0, 0, -1.6)`,为了演示近大远小的视觉效果，我又增加了旋转矩阵`GLKMatrix4 rotateMatrix = GLKMatrix4MakeRotation(varyingFactor, 0, 1, 0)`。最后将 `perspectiveMatrix * translateMatrix * rotateMatrix`的结果赋值给Vertex Shader中的transform。
+如果读者还记得上一篇提到的矩阵运算的话，就应该知道`perspectiveMatrix * translateMatrix * rotateMatrix`代表着先旋转再平移最后执行透视投影。这是以后所有3D变换操作的基本顺序，投影必须放在最后。透视投影的效果如下。
+
+![](http://upload-images.jianshu.io/upload_images/2949750-a007392d8ada426f.gif?imageMogr2/auto-orient/strip)
+
+## 正交投影
+代码如下
+```
+ // 正交投影
+    float viewWidth = self.view.frame.size.width;
+    float viewHeight = self.view.frame.size.height;
+    GLKMatrix4 orthMatrix = GLKMatrix4MakeOrtho(-viewWidth/2, viewWidth/2, -viewHeight / 2, viewHeight/2, -10, 10);
+    GLKMatrix4 scaleMatrix = GLKMatrix4MakeScale(200, 200, 200);
+    self.transformMatrix = GLKMatrix4Multiply(scaleMatrix, rotateMatrix);
+    self.transformMatrix = GLKMatrix4Multiply(orthMatrix, self.transformMatrix);
+```
+正交投影其实比较好理解，原先屏幕的X轴从左到右是-1到1，Y轴从上到下是1到-1，经过`GLKMatrix4 orthMatrix = GLKMatrix4MakeOrtho(-viewWidth/2, viewWidth/2, -viewHeight / 2, viewHeight/2, -10, 10)`正交矩阵的变换，就会变成X轴从左到右是-viewWidth/2到viewWidth/2，Y轴从上到下是viewHeight/2到-viewHeight / 2，viewWidth和viewHeight是屏幕的宽和高。我增加了一个缩放矩阵`GLKMatrix4 scaleMatrix = GLKMatrix4MakeScale(200, 200, 200)`，是为了可以看见渲染出来的矩形。因为它原本只有1 x 1的大小，在正交投影后，也就是一个像素的大小，几乎是看不见的。正交投影里的nearZ和farZ代表可视的Z轴范围，超出的点就不可见了。代码效果如下。
+
+![](http://upload-images.jianshu.io/upload_images/2949750-09b291c6009c309b.gif?imageMogr2/auto-orient/strip)
+
+本篇主要介绍了OpenGL中的两个重要投影矩阵，掌握好它们对于后面更深入的学习3D和2D渲染有着非常重要的作用。
+
+下一篇会讲解摄像机，作为3D渲染中最基本的三大矩阵MVP之一，学习完之后就可以正式踏入3D渲染的世界了。
