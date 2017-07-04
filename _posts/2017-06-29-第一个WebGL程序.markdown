@@ -22,7 +22,7 @@ WebGL和OpenGL都带一个GL后缀，看起来很有关系，实际上关系很�
 
 ### 准备画布
 在编写WebGL代码之前，我们先要准备一个画布，用来绘制3D物体。如果浏览器不支持`canvas`，` Your browser doesn't appear to support the <canvas> element`将会被显示出来提醒用户。` <div id="glInfo" style=""></div>`将被用来显示fps信息。
-```javascript
+```html
 <div style="width: 100%; height: 300px; position:relative; background:rgba(0,0,0,0);">
   <canvas id="glCanvas" width="400" height="300">
     Your browser doesn't appear to support the 
