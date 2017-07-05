@@ -2,7 +2,7 @@
 layout: post
 title:  "第一个WebGL程序"
 date:   2017-06-29 16:13:25 +0800
-categories: WebGL实验室
+categories: 学习WebGL
 ---
 
 这是学习WebGL系列的第一篇文章，我们将了解什么是WebGL以及使用WebGL的一个简单例子。

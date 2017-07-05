@@ -1,0 +1,146 @@
+---
+layout: post
+title: 绘制三角形
+date: 2017-07-05 16:43:15 +0800
+categories: 学习WebGL
+---
+
+本文将介绍如何使用WebGL绘制一个三角形，下面是代码演示。
+<script async src="//jsrun.net/SQYKp/embed/all/dark/"></script>
+
+想要使用WebGL绘制一个三角形，我们需要先了解一些基本概念。
+
+### WebGL如何绘制几何体？
+从三角形到四边形，再到正方体，或是更为复杂的3D模型，都可以称作几何体，它们都是由点组成的。三个点是三角形，四个点就是四边形。我们通常能想到关于点的描述无非就是位置，我们可以用一个数组来表示点的位置。比如x,y坐标位于`(0，1)`, `(-1，-1)`，`(1，-1)`的三个点就可以构成一个三角形。如果切换到3D世界，加上z轴的坐标，就是`(0，1，0)`, `(-1，-1，0)`，`(1，-1，0)`。我们把这些数据按照顺序都放到一个数组里，就变成了`(0，1，0，-1，-1，0，1，-1，0)`，这就是WebGL需要的数据。不过只有这些是不够的，我们还要告诉WebGL，每个点的数据由3个数字构成，这样WebGL就知道每隔3个数取一次点的位置数据了。最后我们还需要告诉WebGL要怎样使用这些点，是填充一个三角形，还是画一个没有填充的三角形，甚至是只画3个点。一个顶点所能包含的信息远远不止位置，这将在后续的文章中详述。
+
+> 在WebGL的世界里，通常称这些点为顶点。
+
+
+### 坐标系
+默认情况下，屏幕坐标如下图所示。x轴从左往右，y轴从下往上，z轴从里向外。
+
+![](http://upload-images.jianshu.io/upload_images/2949750-81f42db2884028b5.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+
+### Shader概念
+Shader是WebGL中很重要的概念，它主要分为Vertex Shader和Fragment Shader。Vertex Shader主要处理顶点数据，它将我们传递进去的顶点数据处理后告诉GPU，GPU就知道需要在哪绘制几何体了。Fragment Shader主要处理像素数据，每个像素在呈现前都要经过Fragment Shader的处理。下面是本文使用的两个简单的Shader。
+```html
+<script type="x-shader/vertex-shader" id="shader-vs">
+            attribute vec4 position;
+            void main() {
+                gl_Position = position;
+            }
+</script>
+<script type="x-shader/fragment-shader" id="shader-fs">
+            void main() {
+                gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0);
+            }
+</script>
+```
+上面是Vertex Shader，`attribute vec4 position;`是我们传递进去的顶点位置，`attribute`表示这是一个顶点属性，`vec4`表示这是一个4维向量，由4个float组成，刚好对应`x,y,z,w`。`w`是什么？在进行矩阵变换时要保持矩阵尺寸的匹配，所以需要用4个float表示位置，这将在后续文章中详细介绍。`gl_Position`是Shader内置的变量，赋给它的值最后会被交给GPU。
+
+下面是Fragment Shader，只做了一件事，给像素赋予了白色`vec4(1.0, 1.0, 1.0, 1.0);`，rgba都是1，这里rgba的取值范围是0到1。`gl_FragColor`也是内置变量，它的值最终会赋给对应的像素。
+
+这两个script节点写在了html中，可以通过`getElementById`获取到他们的文本。
+
+
+### 使用Shader
+使用Shader的方式比较繁琐，需要编译链接，你可以把Shader当做运行在GPU上的小程序，编译链接后才能在GPU上运行。下面是编译链接的代码。
+```
+function makeProgram() {
+  program = gl.createProgram();
+
+  vertexShaderNode = document.getElementById("shader-vs");
+  vertexShader = makeShader(vertexShaderNode.textContent, gl.VERTEX_SHADER);
+  fragmentShaderNode = document.getElementById("shader-fs");
+  fragmentShader = makeShader(fragmentShaderNode.textContent, gl.FRAGMENT_SHADER);
+  gl.attachShader(program, vertexShader);
+  gl.attachShader(program, fragmentShader);
+  gl.linkProgram(program);
+
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    console.log('Unable to initialize the shader program: ' + gl.getProgramInfoLog(program));
+  }
+  return program;
+}
+
+function makeShader(shaderSrc, shaderType) {
+  shader = gl.createShader(shaderType);
+  gl.shaderSource(shader, shaderSrc);
+  gl.compileShader(shader);
+  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+    console.log('An error occurred compiling the shaders: ' + gl.getShaderInfoLog(shader));
+    gl.deleteShader(shader);
+    return null;
+  }
+  return shader;
+}
+```
+`makeShader`负责编译单个Shader，`makeProgram`负责编译链接Vertex Shader和Fragment Shader。最后生成小程序`program`，它是连接CPU和GPU的桥梁，我会在渲染时使用它。
+
+### 准备三角形的顶点数据
+ WebGL的顶点数据需要放到它生成的容器中才能被它使用。所以我们需要使用`gl`的`createBuffer`方法来生成需要的顶点数据容器，然后将顶点数据放到容器中。这里使用`Float32Array`是因为WebGL对数据大小很敏感，我们渲染时需要明确告诉它一个顶点数据有多大，所以这里使用32位的浮点数据明确的转换`triangle`数组。`gl.STATIC_DRAW`表示我们不会修改这块缓存，GPU会针对性的做一些优化。
+```
+function makeBuffer() {
+  var triangle = [
+    0.0, 1.0, 0.0, 
+    -1.0, -1.0, 0.0,
+    1.0, -1.0, 0.0,
+  ];
+  buffer = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(triangle), gl.STATIC_DRAW);
+  return buffer;
+}
+```
+
+### 绘制三角形
+```
+gl.viewport(0,0,canvas.width,canvas.height);
+gl.clearColor(1.0, 0.0, 0.0, 1.0);
+gl.clear(gl.COLOR_BUFFER_BIT);
+
+gl.useProgram(program);
+gl.bindBuffer(gl.ARRAY_BUFFER, triangleBuffer);
+positionLoc = gl.getAttribLocation(program, 'position');
+gl.enableVertexAttribArray(positionLoc);
+gl.vertexAttribPointer(positionLoc, 3, gl.FLOAT, false, 4 * 3, 0);
+
+gl.drawArrays(gl.TRIANGLES, 0, 3);
+```
+绘制分为下面几步：
+* 设置viewport大小，viewport表示绘制的区域，你也可以设置0，0，100，100试试看绘制区域发生了什么样的变化。
+* 使用我们生成的`program`，`gl.useProgram(program);`，这表示下面的绘制操作都会使用我们的Shader。
+* `gl.bindBuffer(gl.ARRAY_BUFFER, triangleBuffer);`，绑定三角形的顶点数据Buffer，表示我们要绘制这个三角形。
+* 下面三行正是我刚开始说的告诉WebGL我们的顶点数据格式是什么样的。首先获取Shader中`position`属性在Shader中的位置，然后使用这个位置激活该属性，最后告诉WebGL`position`属性有3个`gl.FLOAT`大小，每个顶点数据的大小也是`3个gl.FLOAT = 3 * 4` 个字节，`position`属性在每个顶点数据中的偏移是0。读者可以参照上面这句话理解`gl.vertexAttribPointer(positionLoc, 3, gl.FLOAT, false, 4 * 3, 0);`。
+* `gl.drawArrays(gl.TRIANGLES, 0, 3);`绘制三角形，`gl.TRIANGLES`表示我想绘制填充的三角形，0表示从第0个顶点开始绘制，3表示绘制3个顶点。WebGL会使用这3个顶点绘制出一个填充颜色的三角形。
+
+### 把它们放到一起
+在`setupGLEnv`中配置`program`和`buffer`。
+```
+function setupGLEnv(canvasID) {
+  canvas = document.getElementById(canvasID);
+  gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+  if (!gl) {
+    alert('天呐！您的浏览器竟然不支持WebGL，快去更新浏览器吧。');
+  }
+  program = makeProgram();
+  triangleBuffer = makeBuffer();
+}
+```
+在`render`中调用绘制代码。
+```
+function render(deltaTime, elapesdTime) {
+  gl.viewport(0,0,canvas.width,canvas.height);
+  gl.clearColor(1.0, 0.0, 0.0, 1.0);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+
+  gl.useProgram(program);
+  gl.bindBuffer(gl.ARRAY_BUFFER, triangleBuffer);
+  positionLoc = gl.getAttribLocation(program, 'position');
+  gl.enableVertexAttribArray(positionLoc);
+  gl.vertexAttribPointer(positionLoc, 3, gl.FLOAT, false, 4 * 3, 0);
+
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+}
+```
+大功告成。
