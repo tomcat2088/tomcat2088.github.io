@@ -45,7 +45,7 @@ Shader是WebGL中很重要的概念，它主要分为Vertex Shader和Fragment Sh
 
 ### 使用Shader
 使用Shader的方式比较繁琐，需要编译链接，你可以把Shader当做运行在GPU上的小程序，编译链接后才能在GPU上运行。下面是编译链接的代码。
-```
+```javascript
 function makeProgram() {
   program = gl.createProgram();
 
@@ -79,7 +79,7 @@ function makeShader(shaderSrc, shaderType) {
 
 ### 准备三角形的顶点数据
  WebGL的顶点数据需要放到它生成的容器中才能被它使用。所以我们需要使用`gl`的`createBuffer`方法来生成需要的顶点数据容器，然后将顶点数据放到容器中。这里使用`Float32Array`是因为WebGL对数据大小很敏感，我们渲染时需要明确告诉它一个顶点数据有多大，所以这里使用32位的浮点数据明确的转换`triangle`数组。`gl.STATIC_DRAW`表示我们不会修改这块缓存，GPU会针对性的做一些优化。
-```
+```javascript
 function makeBuffer() {
   var triangle = [
     0.0, 1.0, 0.0, 
@@ -94,7 +94,7 @@ function makeBuffer() {
 ```
 
 ### 绘制三角形
-```
+```javascript
 gl.viewport(0,0,canvas.width,canvas.height);
 gl.clearColor(1.0, 0.0, 0.0, 1.0);
 gl.clear(gl.COLOR_BUFFER_BIT);
@@ -116,7 +116,7 @@ gl.drawArrays(gl.TRIANGLES, 0, 3);
 
 ### 把它们放到一起
 在`setupGLEnv`中配置`program`和`buffer`。
-```
+```javascript
 function setupGLEnv(canvasID) {
   canvas = document.getElementById(canvasID);
   gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
@@ -128,7 +128,7 @@ function setupGLEnv(canvasID) {
 }
 ```
 在`render`中调用绘制代码。
-```
+```javascript
 function render(deltaTime, elapesdTime) {
   gl.viewport(0,0,canvas.width,canvas.height);
   gl.clearColor(1.0, 0.0, 0.0, 1.0);
