@@ -1,0 +1,159 @@
+---
+layout: post
+title: 渲染到纹理
+date: 2017-07-05 15:30:14 +0800
+categories: 学习OpenGLES系列文章
+---
+> 本文所用的代码在`https://github.com/SquarePants1991/OpenGLESLearn.git`的`chapter20`分支中。
+
+本文将介绍渲染到纹理技术。之前的例子都是将3D物体渲染到屏幕上，在iOS中GLKView为我们做好了渲染到屏幕的所有准备工作，我们只需要调用Open GL ES的绘制方法就可以轻松的渲染到屏幕。那么我们接下来了解一下GLKView为我们做了哪些准备工作。
+
+### FrameBuffer
+FrameBuffer是OpenGL ES中重要基础组件之一，经常被缩写成FBO（FrameBufferObject），它用来承载GPU计算出来的数据，包括颜色（Color），深度（Depth），遮罩（Stencil）。FrameBuffer包括3个缓冲区，颜色缓冲区，深度缓冲区，遮罩缓冲区，每个缓冲区就是一块内存，存储着对应的像素数据。比如颜色缓冲区，一般像素格式都是RGBA，一共4个字节，如果是一个大小1024乘以1024的FrameBuffer，那么颜色缓冲区所占的内存就是1024x1024x4个字节。深度和遮罩缓冲区也有自己的格式。GLKView默认为我们创建了一个FrameBuffer，并且绑定了刚才说的3个缓冲区到这个FrameBuffer上。我们所有绘制的操作，最终都被写入到这个FrameBuffer的缓冲区中。这个FrameBuffer里的颜色缓冲区的数据最终会被呈现在GLKView上。
+
+### 手动创建FrameBuffer
+既然GLKView可以帮我们创建FrameBuffer，那么我们自己是不是也可以手动创建FrameBuffer呢？自然是可以的。创建FrameBuffer分为下面几个步骤。
+* 创建FrameBuffer对象，并绑定到GL_FRAMEBUFFER上，等待后续处理。
+```
+glGenFramebuffers(1, &framebuffer);
+glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+```
+
+* 生成颜色缓冲区并附加到FrameBuffer上。这里我们使用一个纹理对象作为颜色缓冲区，这意味着所有绘制到FrameBuffer的颜色数据都会存储到`framebufferColorTexture`中。更酷的是我们可以把这个纹理`framebufferColorTexture`当做贴图使用，比如用作漫反射贴图（diffuseMap）。
+```
+glGenTextures(1, &framebufferColorTexture);
+glBindTexture(GL_TEXTURE_2D, framebufferColorTexture);
+glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, framebufferSize.width, framebufferSize.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, framebufferColorTexture, 0);
+```
+
+* 生成深度缓冲区并附加到framebuffer上。这里我们同样使用了纹理对象作为缓冲区。
+```
+glGenTextures(1, &framebufferDepthTexture);
+glBindTexture(GL_TEXTURE_2D, framebufferDepthTexture);
+glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, framebufferSize.width, framebufferSize.height, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, NULL);
+glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT
+                       , GL_TEXTURE_2D, framebufferDepthTexture, 0);
+```
+
+> 本例使用的是OpenGL ES2 API，如果使用OpenGL ES3，GL_DEPTH_COMPONENT需要修改成GL_DEPTH_COMPONENT_OES。`glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT_OES, framebufferSize.width, framebufferSize.height, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, NULL);`，修改第一个，第二个不需要修改。
+
+如果你不需要使用纹理作为深度缓冲区，可以使用下面的写法替代。创建一个RenderBuffer，而不是Texture。
+```
+GLuint depthBufferID;
+glGenRenderbuffers(1, &depthBufferID);
+glBindRenderbuffer(GL_RENDERBUFFER, depthBufferID);
+glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT16, framebufferSize.width, framebufferSize.height);
+glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depthBufferID);
+```
+
+> 本文不会使用遮罩（Stencil）缓冲区，所以这里不做详细介绍。
+
+* 检查FrameBuffer的创建状态。
+```
+GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+if (status != GL_FRAMEBUFFER_COMPLETE) {
+    // framebuffer生成失败
+}
+```
+如果状态不是`GL_FRAMEBUFFER_COMPLETE`，就说明创建有问题。可以根据`status`排查问题。
+
+### 使用FrameBuffer
+接下来我们就要在创建好的FrameBuffer上绘制物体了。步骤很简单，绑定FrameBuffer，设置Viewport，绘制。
+```
+glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+glViewport(0, 0, self.framebufferSize.width, self.framebufferSize.height);
+glClearColor(0.8, 0.8, 0.8, 1);
+glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+self.projectionMatrix = GLKMatrix4MakePerspective(GLKMathDegreesToRadians(90), self.framebufferSize.width / self.framebufferSize.height, 0.1, 1000.0);
+self.cameraMatrix = GLKMatrix4MakeLookAt(0, 1, sin(self.elapsedTime) * 5.0 + 9.0, 0, 0, 0, 0, 1, 0);
+[self drawObjects];
+```
+Viewport是绘制区域的大小，我们把Viewport设置为FrameBuffer的尺寸，这样绘制区域就可以撑满整个FrameBuffer了。我还设置了新的clearColor，新的投影矩阵，观察矩阵，这样就可以在FrameBuffer中呈现出不一样的绘制效果。`[self drawObjects];`里简单的封装了之前3D物体的绘制。
+```
+- (void)drawObjects {
+    [self.objects enumerateObjectsUsingBlock:^(GLObject *obj, NSUInteger idx, BOOL *stop) {
+        [obj.context active];
+        [obj.context setUniform1f:@"elapsedTime" value:(GLfloat)self.elapsedTime];
+        [obj.context setUniformMatrix4fv:@"projectionMatrix" value:self.projectionMatrix];
+        [obj.context setUniformMatrix4fv:@"cameraMatrix" value:self.cameraMatrix];
+        [obj.context setUniform3fv:@"eyePosition" value:self.eyePosition];
+        [obj.context setUniform3fv:@"light.position" value:self.light.position];
+        [obj.context setUniform3fv:@"light.color" value:self.light.color];
+        [obj.context setUniform1f:@"light.indensity" value:self.light.indensity];
+        [obj.context setUniform1f:@"light.ambientIndensity" value:self.light.ambientIndensity];
+        [obj.context setUniform3fv:@"material.diffuseColor" value:self.material.diffuseColor];
+        [obj.context setUniform3fv:@"material.ambientColor" value:self.material.ambientColor];
+        [obj.context setUniform3fv:@"material.specularColor" value:self.material.specularColor];
+        [obj.context setUniform1f:@"material.smoothness" value:self.material.smoothness];
+        
+        [obj.context setUniform1i:@"useNormalMap" value:self.useNormalMap];
+        
+        [obj draw:obj.context];
+    }];
+}
+```
+
+### 使用FrameBuffer的颜色缓冲区纹理
+经过上面的步骤，我们成功的在FrameBuffer上进行了绘制。此时颜色缓冲区纹理已经存储了刚刚的绘制结果。接下来我们将这个纹理显示在一个平面上。`Plane`类绘制了一个1x1面朝z轴正方向的平面，并且接受一个diffuseMap作为漫反射贴图。我为它单独写了一个非常简单的Fragment Shader （frag_framebuffer_plane.glsl），没有光照处理，直接显示diffuseMap的像素。
+```
+precision highp float;
+
+varying vec2 fragUV;
+
+uniform sampler2D diffuseMap;
+
+void main(void) {
+    gl_FragColor = texture2D(diffuseMap, fragUV);
+}
+```
+下面的代码将绘制3D物体和一个用来显示FrameBuffer颜色缓冲区纹理的平面。
+```
+[view bindDrawable];
+glClearColor(0.7, 0.7, 0.7, 1);
+glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+float aspect = self.view.frame.size.width / self.view.frame.size.height;
+self.projectionMatrix = GLKMatrix4MakePerspective(GLKMathDegreesToRadians(90), aspect, 0.1, 1000.0);
+self.cameraMatrix = GLKMatrix4MakeLookAt(0, 1, 6.5, 0, 0, 0, 0, 1, 0);
+[self drawObjects];
+[self drawPlane];
+```
+`[view bindDrawable];`将GLKView生成的FrameBuffer绑定到`GL_FRAMEBUFFER `，并设置好Viewport，这样后面绘制的内容将呈现在GLKView上。接着重新设置投影矩阵和观察矩阵。绘制3D物体`[self drawObjects];`。绘制平面`[self drawPlane];`。值得一提的是，绘制平面时，我使用了正交投影矩阵，这样平面就不会有透视效果，这正是我想要的。
+```
+- (void)drawPlane {
+    [self.displayFramebufferPlane.context active];
+    [self.displayFramebufferPlane.context setUniformMatrix4fv:@"projectionMatrix" value:self.planeProjectionMatrix];
+    [self.displayFramebufferPlane.context setUniformMatrix4fv:@"cameraMatrix" value:GLKMatrix4Identity];
+    [self.displayFramebufferPlane draw:self.displayFramebufferPlane.context];
+}
+```
+`planeProjectionMatrix`就是平面的正交投影矩阵，在`createPlane`中被设置，`Plane`使用了新的GLContext，由`vertex.glsl`和`frag_framebuffer_plane.glsl`组成。`framebufferColorTexture`颜色缓冲区纹理在`Plane`初始化时被传递进去。这里的纹理对象使用的GLuint类型的，相当于GLKTextureInfo的name属性，是OpenGL ES原始的纹理对象。
+```
+- (void)createPlane {
+    NSString *vertexShaderPath = [[NSBundle mainBundle] pathForResource:@"vertex" ofType:@".glsl"];
+    NSString *fragmentShaderPath = [[NSBundle mainBundle] pathForResource:@"frag_framebuffer_plane" ofType:@".glsl"];
+    GLContext *displayFramebufferPlaneContext = [GLContext contextWithVertexShaderPath:vertexShaderPath fragmentShaderPath:fragmentShaderPath];
+    self.displayFramebufferPlane = [[Plane alloc] initWithGLContext:displayFramebufferPlaneContext texture:framebufferColorTexture];
+    self.displayFramebufferPlane.modelMatrix = GLKMatrix4Identity;
+    self.planeProjectionMatrix = GLKMatrix4MakeOrtho(-2.5, 0.5, -4.5, 0.5, -100, 100);
+}
+```
+至于`Plane`的实现代码很简单，读者可以自行clone代码查看。
+
+### 最终效果
+![](http://upload-images.jianshu.io/upload_images/2949750-5fc0e290676a9480.jpg?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+右上角显示的是使用了颜色缓冲区纹理作为漫反射贴图的平面。
+
+### 渲染到纹理能做什么？
+最直接的用法就是同时显示两个视角的观察结果，比如赛车游戏能在右上角同时查看车后的情况。还有就是镜面效果，水面效果，深度缓冲区贴图可以做阴影效果（颜色缓冲区也能做，不过效果还是深度缓冲区好），所以理解好渲染到纹理对后面的特效制作还是很有帮助的。
+
+### 写在最后
+OpenGL ES进阶篇到此就结束啦，希望通过这部分的文章，大家能够对OpenGL ES有更深的理解。下一部分高级篇会以介绍一些OpenGL ES特效的原理和实现为主，比如阴影效果，纹理投影效果，水面效果，粒子效果，物理引擎等等，敬请期待。
