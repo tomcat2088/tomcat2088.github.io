@@ -1,0 +1,33 @@
+<canvas id="myChart" width="400" height="400"></canvas>
+<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.6.0/Chart.bundle.min.js"></script>
+<script type="text/javascript">
+window.onload = function () {
+    var ctx = document.getElementById("myChart").getContext('2d');
+    var labels = [];
+    for (var i = 6; i >= 0; --i) {
+        var now = new Date();
+        now.setDate(now.getDate() - i);
+        labels.push((now.getMonth() + 1) + "-" + now.getDate());
+    }
+    var myChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: '简书阅读量统计总表',
+                data: [12, 19, 3, 5, 2, 3, 8],
+                borderWidth: 1
+            }]
+        },
+        options: {
+            scales: {
+                yAxes: [{
+                    ticks: {
+                        beginAtZero:true
+                    }
+                }]
+            }
+        }
+    });
+}
+</script>
