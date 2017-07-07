@@ -1,0 +1,91 @@
+---
+layout: post
+title: 深入了解Shader
+date: 2017-07-07 17:12:26 +0800
+categories: 学习WebGL
+---
+
+本文将带大家深入了解Shader，下面是代码演示。
+<script async src="//jsrun.net/KPYKp/embed/all/dark/"></script>
+
+### 前言
+上篇文章中我们已经和Shader有了一面之缘，本文将带大家深入Shader的世界，介绍Shader的语言特性，数据类型，内置方法等等。Shader语言和C语言很相似，如果你学过C语言应该可以很快适应Shader的编程风格。本文提供了一个具备Shader基本编程元素的例子，通过Shader控制三角形旋转，并把位置转变成了颜色，读者可以通过修改这个例子更快的熟悉Shader。
+
+### 代码框架
+无论是Vertex Shader还是Fragment Shader，都有基本的代码框架。下面是本文使用的Vertex Shader。
+```c
+attribute vec4 position;
+varying vec4 fragColor;
+uniform float elapsedTime;
+void main() {
+    fragColor = position * 0.5 + 0.5;
+    float rotateAngle = elapsedTime * 0.001;
+    float x = position.x * cos(rotateAngle) - position.y * sin(rotateAngle);
+    float y = position.x * sin(rotateAngle) + position.y * cos(rotateAngle);
+    gl_Position = vec4(x, y, 0.0, 1.0);
+}
+```
+只有Vertex Shader可以声明`attribute`变量，它用来接受CPU传递过来的顶点数据。除了`attribute`变量之外，还可以声明`uniform`变量和`varying`变量。具体含义还以下面会作详解。`main`方法是Shader代码执行的入口，这和C语言一模一样。在Vertex Shader中你必须给`gl_Position`赋值，否则这个Vertex Shader没有任何意义，没有任何顶点会传递给GPU。
+
+下面是本文使用的Fragment Shader。
+```c
+varying mediump vec4 fragColor;
+void main() {
+    gl_FragColor = fragColor;
+}
+```
+Fragment Shader除了`attribute`变量其他变量都可以拥有，`varying`变量必须和Vertex Shader中的`varying`变量类型保持一致，`varying`变量会从Vertex Shader传递到Fragment Shader中。那么问题来了，Vertex Shader是每个顶点调用一次，而Fragment Shader是每个像素调用一次，那么顶点之间像素的`varying`变量值是如何计算的呢？答案是GPU会根据要绘制的形状自动插值计算。大家可以观察示例，三角形顶点之间的颜色正是通过各个顶点的`fragColor`插值计算出来的。
+
+### 变量类型
+Shader有下面几种变量类型：
+* `void` 和C语言的void一样，无类型
+* `bool` 布尔
+* `int` 有符号的int
+* `float` 浮点数
+* `vec2`, `vec3`, `vec4` 2，3，4维向量，如果你不知道什么是向量，可以理解为2，3，4长度的数组。
+* `bvec2`, `bvec3`, `bvec4`  2，3，4维布尔值的向量。
+* `ivec2`, `ivec3`, `ivec4` 2，3，4维int值的向量。
+* `mat2`, `mat3`, `mat4` 2x2, 3x3, 4x4 浮点数的矩阵，如果你不了解矩阵，后面会有一篇文章单独介绍矩阵。
+* `sampler2D` 纹理，后面会详细介绍。
+* `samplerCube` Cube纹理，后面会详细介绍。
+
+### 变量精度
+细心的读者可能会发现同样是`varying`变量，在Fragment Shader中多了一个`mediump`修饰符。`mediump`表示的是变量类型的精度。因为Fragment Shader是逐像素执行，所以会尽量控制计算的复杂度。对于不需要过高精度的变量，可以手动指定精度从而提高性能。精度主要分为下面3种。
+* `highp`, 16bit，浮点数范围`(-2^62, 2^62)`，整数范围`(-2^16, 2^16)`
+* `mediump`, 10bit，浮点数范围`(-2^14, 2^14)`，整数范围`(-2^10, 2^10)`
+* `lowp`, 8bit，浮点数范围`(-2, 2)`，整数范围`(-2^8, 2^8)`
+如果你想所有的float都是高精度的，可以在Shader顶部声明`precision highp float;`，这样你就不需要为每一个变量声明精度了。
+
+### 运算符
+Shader可以使用所有C语言的运算符。不过要注意的是二元运算比如加法，乘法等，只能用在两个类型相同的变量上，比如float只能和float相加。因为Shader不会为你进行隐式的类型转换，这样会增加GPU的负担。我们表示float变量时，需要自行增加小数点，比如浮点数5要写成5.0，否则会被认定为整数。下面是能够使用的运算符，读者可以当做参考。
+![](http://upload-images.jianshu.io/upload_images/2949750-6cde500bba3b3b91.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+
+### uniform变量
+uniform变量会被所有Shader共享，比如有3个顶点，Vertex Shader会被执行3次，每次访问的uniform变量都是同一个由js代码设定好的值。下面是本文使用的设定uniform `elapsedTime`的js代码。
+```javascript
+elapsedTimeUniformLoc = gl.getUniformLocation(program, 'elapsedTime');
+gl.uniform1f(elapsedTimeUniformLoc, elapesdTime);
+```
+首先获取uniform `elapsedTime`在Shader中的位置，然后设置它的值。`uniform1f`是`uniformXXX`函数簇里面用来设置一个`float`类型uniform的方法。通过`uniformXXX`里的XXX很容易看出来这个方法是设置什么类型的uniform的，下面是常见的几种格式。
+* `uniform{n}{type}`  n表示数目1~4，type表示类型，`float`是`f`，`int`是`i`，`unsigned int`是`ui`。所以设置一个整数就是 `uniform1i`。
+* `uniform{n}{type}v`  相比于上面的多了一个v，表示向量，所以传递的参数就是类型为type，维度为n的向量。
+* `uniformMatrix{n}{type}v` 这个用来设置类型为type nxn的矩阵。
+上面这些方法会在后面的文章中用到，这里大致了解即可。
+
+### varying变量
+`varying`变量是Vertex Shader和Fragment Shader的桥梁，Fragment Shader中的`varying`变量由Vertex Shader中的`varying`变量自动插值计算出来。因为Fragment Shader是逐像素执行，某些使用`varying`变量的效果在Fragment Shader中实现会更加细腻，比如光照效果。
+
+### 向量的访问
+当我们拥有一个`vec4`变量，我们可以有很多种方法访问它内部的值。
+* `vec4.x`,`vec4.y`,`vec4.z`,`vec4.w` 通过x，y，z，w可以分别取出4个值。
+* `vec4.xy`,`vec4.xx`,`vec4.xz`,`vec4.xyz` 任意组合可以取出多种维度的向量。
+* `vec4.r`,`vec4.g`,`vec4.b`,`vec4.a` 还可以通过r，g，b，a分别取出4个值，同上可以任意组合。
+* `vec4.s`,`vec4.t`,`vec4.p`,`vec4.q` 还可以通过s，t，p，q分别取出4个值，同上可以任意组合。
+`vec3`和`vec2`也是同样，无非就是少了几个变量，比如`vec3`只有x，y，z。`vec2`只有x，y。
+
+### 内置方法
+有很多内置方法可以使用，如果可以选择内置方法实现算法，避免自己写代码再实现一遍，因为内置的方法能够得到更好的硬件支持。下面是可用的方法表格。
+![](http://upload-images.jianshu.io/upload_images/2949750-2c48a2d2459d5524.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+可能很多方法你都不知道有什么用，没关系，后面使用到时我会再做解释。
+
+上面的介绍覆盖了Shader的大部分基础知识，当然还有很多使用细节和不常用的知识没有介绍，这些知识会在后面使用到时再详细介绍，这样可以避免大家刚开始就对Shader产生畏惧感。
