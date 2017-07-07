@@ -16,5 +16,5 @@ def job():
         subprocess.call(['zsh', './publish.sh'])
 # BlockingScheduler
 scheduler = BlockingScheduler()
-scheduler.add_job(job, 'cron', day_of_week='1-7', hour=14, minute=8)
+scheduler.add_job(job, 'cron', day_of_week='1-7', hour=17, minute=0)
 scheduler.start()

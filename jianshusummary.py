@@ -16,7 +16,7 @@ def requestUrl(url, headers):
     return responseData
 
 def requestAll():
-    index = 0
+    index = 1
     articles = []
     requestNeedStop = False
     while requestNeedStop == False:
