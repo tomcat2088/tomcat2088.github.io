@@ -29,7 +29,7 @@ def requestAll():
         soup = BeautifulSoup(html, 'html.parser')
         for item in soup.find_all('li'):
             article = {}
-            article[' title'] = item.find_all('a', 'title')[0].string
+            article['title'] = item.find_all('a', 'title')[0].string
             article['readCount'] = int(item.find_all('i', 'iconfont ic-list-read')[0].next_sibling)
             article['commentCount'] = int(item.find_all('i', 'iconfont ic-list-comments')[0].next_sibling)
             article['loveCount'] = int(item.find_all('i', 'iconfont ic-list-like')[0].next_sibling)
