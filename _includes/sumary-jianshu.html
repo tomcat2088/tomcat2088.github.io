@@ -1,23 +1,41 @@
-<canvas id="myChart" width="400" height="400"></canvas>
+<div id="canvas-stack">
+
+</div>
+<script
+  src="https://code.jquery.com/jquery-3.2.1.min.js"
+  integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4="
+  crossorigin="anonymous"></script>
 <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.6.0/Chart.bundle.min.js"></script>
 <script type="text/javascript">
-window.onload = function () {
-    var ctx = document.getElementById("myChart").getContext('2d');
-    var labels = [];
-    for (var i = 6; i >= 0; --i) {
-        var now = new Date();
-        now.setDate(now.getDate() - i);
-        labels.push((now.getMonth() + 1) + "-" + now.getDate());
+function formatDate(date) {
+    yearStr = date.getFullYear() + '';
+    monthStr = date.getMonth() + 1 + '';
+    if (monthStr.length == 1) { monthStr = '0' + monthStr; }
+    dayStr = date.getDate() + '';
+    if (dayStr.length == 1) { dayStr = '0' + dayStr; }
+    return yearStr + '-' + monthStr + '-' + dayStr;
+}
+function createChart(titles, datas, bgColors, labels) {
+    if (titles.length == 0) return;
+    canvasStackNode = document.getElementById('canvas-stack');
+    canvas = document.createElement('canvas');
+    canvasStackNode.appendChild(canvas);
+
+    var ctx = canvas.getContext('2d');
+    var datasets = []
+    for (index in titles) {
+        datasets.push({
+            label: titles[index],
+            data: datas[index],
+            borderWidth: 1,
+            backgroundColor: bgColors[index],
+        });
     }
     var myChart = new Chart(ctx, {
         type: 'line',
         data: {
             labels: labels,
-            datasets: [{
-                label: '简书阅读量统计总表',
-                data: [12, 19, 3, 5, 2, 3, 8],
-                borderWidth: 1
-            }]
+            datasets: datasets
         },
         options: {
             scales: {
@@ -29,5 +47,80 @@ window.onload = function () {
             }
         }
     });
+}
+
+function fetchData(completeCallback) {
+    completeCount = 7;
+    dataJsons = {}
+    for (var i = 6; i >= 0; --i) {
+        var now = new Date();
+        now.setDate(now.getDate() - i);
+        filename = formatDate(now);
+        $.get('/public/jianshu-summary/' + filename + '.json', function(data) {
+            coms = this.url.split('/');
+            filenameCom = coms[coms.length - 1].split('.')[0];
+            console.log(filenameCom);
+            dataJsons[filenameCom] = data;
+            completeCount--;
+            if (completeCount <= 0) {
+                completeCallback(dataJsons);
+            }
+        }).fail(function() {
+            completeCount--;
+            if (completeCount <= 0) {
+                completeCallback(dataJsons);
+            }
+        });
+    } 
+}
+
+window.onload = function () {
+   fetchData(function(data) {
+    var labels = Object.keys(data);
+    labels = labels.sort();
+    var sumReadCounts = [];
+    var sumLikeCounts = [];
+    var sumCommentCounts = [];
+    for (keyIndex in labels) {
+        key = labels[keyIndex];
+        readCount = 0;
+        likeCount = 0;
+        commentCount = 0;
+        for (item in data[key]) {
+            readCount += data[key][item].readCount;
+            likeCount += data[key][item].loveCount;
+            commentCount += data[key][item].commentCount;
+        }
+        sumReadCounts.push(readCount);
+        sumLikeCounts.push(likeCount);
+        sumCommentCounts.push(commentCount);
+    }
+    createChart(['简书阅读量统计总表'], [sumReadCounts], ['rgba(255, 99, 132, 0.2)'], labels);
+    createChart(['简书点赞量统计总表'], [sumLikeCounts], ['rgba(255, 99, 132, 0.2)'], labels);
+    createChart(['简书评论量统计总表'], [sumCommentCounts], ['rgba(255, 99, 132, 0.2)'], labels);
+
+    if (Object.keys(data).length > 0) {
+        firstData = data[Object.keys(data)[0]];
+        for (index in firstData) {
+            item = firstData[index];
+            readCounts = []
+            likeCounts = []
+            commentCounts = []
+            for (keyIndex in labels) {
+                key = labels[keyIndex];
+                for (itemIndex in data[key]) {
+                    if (data[key][itemIndex].title == item.title) {
+                        readCounts.push(data[key][itemIndex].readCount);
+                        likeCounts.push(data[key][itemIndex].loveCount);
+                        commentCounts.push(data[key][itemIndex].commentCount);
+                    }
+                }
+            }
+            createChart([item.title+'-阅读量',item.title+'-点赞量',item.title+'-评论量'], [readCounts, likeCounts, commentCounts], ['rgba(255, 99, 132, 0.2)', 
+                'rgba(54, 162, 235, 0.2)',
+                'rgba(255, 206, 86, 0.2)'], labels);
+        }
+    }
+   });
 }
 </script>
