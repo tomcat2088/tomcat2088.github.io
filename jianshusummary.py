@@ -44,8 +44,9 @@ def processJianshuSummary():
         return False
     jsonStr = json.dumps(articles)
 
-    filename = str.format('/Users/wangyang/Documents/Codes/OnGit/SquarePants1991.github.io/public/jianshu-summary/{0}.json', datetime.datetime.today().strftime('%Y-%m-%d'))
+    filename = str.format('./public/jianshu-summary/{0}.json', datetime.datetime.today().strftime('%Y-%m-%d'))
     with open(filename, 'w') as file:
         file.write(jsonStr)
     return True
 
+processJianshuSummary()
