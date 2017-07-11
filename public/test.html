@@ -1,16 +1,19 @@
 <!DOCTYPE html>
 <html>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.3/require.min.js"></script>
 <head>
     <title></title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.3/require.min.js"></script>
 </head>
 <body>
+<div id="taobaoScripts">
+    Taobao Scripts
+</div>
 
 <a data-type="3" data-tmpl="200x200" data-tmplid="197" data-rd="2" data-style="2" data-border="1" href="#"></a>
 
 <script type="text/javascript">
     (function(win,doc){
-        var s = doc.createElement("script"), h = doc.getElementsByTagName("head")[0];
+        var s = doc.createElement("script"), h = doc.getElementById("taobaoScripts");
         if (!win.alimamatk_show) {
             s.charset = "gbk";
             s.async = true;
