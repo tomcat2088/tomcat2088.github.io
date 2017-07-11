@@ -9,7 +9,7 @@
 
 <script type="text/javascript">
     (function(win,doc){
-        var s = doc.createElement("script"), h = doc.getElementById("taobaoScripts");
+        var s = doc.createElement("script"), h = doc.getElementsByTagName("head")[0];
         if (!win.alimamatk_show) {
             s.charset = "gbk";
             s.async = true;
