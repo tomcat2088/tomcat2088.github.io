@@ -13,7 +13,7 @@
 # you will see them accessed via {{ site.title }}, {{ site.email }}, and so on.
 # You can create any custom variable you would like, and they will be accessible
 # in the templates via {{ site.myvariable }}.
-title: handyTool的工作间
+title: handyTOOL的工作间
 email: schrodingerhavecat@hotmail.com
 description: > # this means to ignore newnes until "baseurl:"
   OpenGL, WebGL, Metal ... 研究各种3D技术
