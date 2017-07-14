@@ -60,7 +60,7 @@ if (projectorUV.x >= 0.0 && projectorUV.x <=1.0 && projectorUV.y >= 0.0 && proje
 
 ### 生成并刷新投影仪的矩阵
 我们回到OC代码来生成投影仪需要的VP矩阵。每次渲染时我都会刷新`projectorMatrix`，让它围绕y轴旋转。只要让camera的up向量围绕y轴旋转就可以做到这一点。随着`projectorMatrix`的旋转，投影的纹理也会随之旋转。
-```objectivec
+```c
 @property (assign, nonatomic) GLKMatrix4 projectorMatrix;
 ...
 
@@ -70,7 +70,7 @@ GLKMatrix4 projectorCameraMatrix = GLKMatrix4MakeLookAt(0, 4, 0, 0, 0, 0, cos(se
 self.projectorMatrix = GLKMatrix4Multiply(projectorProjectionMatrix, projectorCameraMatrix);
 ```
 然后把`projectorMatrix`赋值给uniform就可以了。
-```objectivec
+```c
 [obj.context setUniformMatrix4fv:@"projectorMatrix" value: self.projectorMatrix];
 ```
 
@@ -78,7 +78,7 @@ self.projectorMatrix = GLKMatrix4Multiply(projectorProjectionMatrix, projectorCa
 
 ### 投影纹理
 针对投影纹理需要处理的事情很简单，初始化&设置uniform。
-```objectivec
+```c
 UIImage *projectorImage = [UIImage imageNamed:@"squarepants.jpg"];
 self.projectorMap = [GLKTextureLoader textureWithCGImage:projectorImage.CGImage options:nil error:nil];
 ...
