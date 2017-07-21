@@ -1,0 +1,190 @@
+---
+layout: post
+title: 基本纹理
+date: 2017-07-21 17:27:40 +0800
+categories: 学习OpenGLES系列文章
+---
+
+下面是本文例子的代码演示。
+<script async src="//jsrun.net/YsYKp/embed/all/dark/"></script>
+
+
+纹理通常来说就是一张图片，我们为每一个顶点指定纹理坐标，然后就可以在Shader中获取相应的纹理像素点颜色了。
+### 纹理坐标
+首先解释一下什么是纹理坐标。WebGL中把一张图的左上角定为0，0点，长宽都定义为1，剩余四个点的坐标就会如下图所示。这样就构成了纹理坐标系统。
+
+![](http://upload-images.jianshu.io/upload_images/2949750-d3909a00f05e1ed5.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+
+一般使用`uv`来表示纹理坐标，`uv`是一个二维向量`(u,v)`，u和v的取值从0到1。我在代码中为每个顶点数据增加了2个`float`来表示`uv`的值。下面是新的顶点数据代码。
+```javascript
+function makeBuffer() {
+  var triangle = [
+      // Z轴上的平面
+      -0.5,   0.5,    0.5,  0, 0, 1,  0, 0,
+      -0.5,   -0.5,   0.5,  0, 0, 1,  0, 1, 
+      0.5,    -0.5,   0.5,  0, 0, 1,  1, 1,
+      0.5,    -0.5,   0.5,  0, 0, 1,  1, 1,
+      0.5,    0.5,    0.5,  0, 0, 1,  1, 0,
+      -0.5,   0.5,    0.5,  0, 0, 1,  0, 0,
+      -0.5,   0.5,    -0.5, 0, 0, -1, 0, 0,
+      -0.5,   -0.5,   -0.5, 0, 0, -1, 0, 1, 
+      0.5,    -0.5,   -0.5, 0, 0, -1, 1, 1,
+      0.5,    -0.5,   -0.5, 0, 0, -1, 1, 1,
+      0.5,    0.5,    -0.5, 0, 0, -1, 1, 0,
+      -0.5,   0.5,    -0.5, 0, 0, -1, 0, 0,
+      // X轴上的平面
+      0.5,    -0.5,   0.5,  1, 0, 0,  0, 0,
+      0.5,    -0.5,   -0.5, 1, 0, 0,  0, 1, 
+      0.5,    0.5,    -0.5, 1, 0, 0,  1, 1,
+      0.5,    0.5,    -0.5, 1, 0, 0,  1, 1,
+      0.5,    0.5,    0.5,  1, 0, 0,  1, 0,
+      0.5,    -0.5,   0.5,  1, 0, 0,  0, 0,
+      -0.5,   -0.5,   0.5,  -1, 0, 0, 0, 0,
+      -0.5,   -0.5,   -0.5, -1, 0, 0, 0, 1, 
+      -0.5,   0.5,    -0.5, -1, 0, 0, 1, 1,
+      -0.5,   0.5,    -0.5, -1, 0, 0, 1, 1,
+      -0.5,   0.5,    0.5,  -1, 0, 0, 1, 0,
+      -0.5,   -0.5,   0.5,  -1, 0, 0, 0, 0,
+      // Y轴上的平面
+      -0.5,   0.5,    0.5,  0, 1, 0,  0, 0,
+      -0.5,   0.5,    -0.5, 0, 1, 0,  0, 1, 
+      0.5,    0.5,    -0.5, 0, 1, 0,  1, 1,
+      0.5,    0.5,    -0.5, 0, 1, 0,  1, 1,
+      0.5,    0.5,    0.5,  0, 1, 0,  1, 0,
+      -0.5,   0.5,    0.5,  0, 1, 0,  0, 0,
+      -0.5,   -0.5,   0.5,  0, -1, 0, 0, 0,
+      -0.5,   -0.5,   -0.5, 0, -1, 0, 0, 1, 
+      0.5,    -0.5,   -0.5, 0, -1, 0, 1, 1,
+      0.5,    -0.5,   -0.5, 0, -1, 0, 1, 1,
+      0.5,    -0.5,   0.5,  0, -1, 0, 1, 0,
+      -0.5,   -0.5,   0.5,  0, -1, 0, 0, 0,
+  ];
+  buffer = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(triangle), gl.STATIC_DRAW);
+  return buffer;
+}
+```
+我们分析一下X轴0.5处的平面的顶点数据。
+```javascript
+      0.5,  -0.5,    0.5, 1,  0,  0, 0, 0,
+      0.5,  -0.5,  -0.5, 1,  0,  0, 0, 1,
+      0.5,  0.5,   -0.5, 1,  0,  0, 1, 1,
+      0.5,  0.5,    -0.5, 1,  0,  0, 1, 1,
+      0.5,  0.5,    0.5, 1,  0,  0, 1, 0,
+      0.5,  -0.5,   0.5, 1,  0,  0, 0, 0,
+```
+第一个三角形uv和顶点对应关系如下。
+` 0.5, -0.5, 0.5`点对应的`uv`是`0, 0`，
+` 0.5, -0.5, -0.5`点对应的`uv`是`0, 1`，
+` 0.5, 0.5, -0.5`点对应的`uv`是`1, 1`。
+
+![](http://upload-images.jianshu.io/upload_images/2949750-934528bb1121112d.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+
+第二个三角形uv和顶点对应关系如下。
+` 0.5,  0.5, -0.5`点对应的`uv`是`1, 1`，
+` 0.5, 0.5, 0.5`点对应的`uv`是`1, 0`，
+` 0.5, -0.5, 0.5`点对应的`uv`是`0, 0`。
+
+![](http://upload-images.jianshu.io/upload_images/2949750-95a4a48ef209f9f1.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+
+这两个三角形的`uv`分别对应纹理的两个三角部分，合在一起刚好是完整的纹理。
+> 在3D建模中，这种顶点和`uv`的映射关系是要通过建模工具去完成的，只有为每个顶点配置了合适的`uv`，才能让贴图按照你想要的方式显示出来。
+
+然后增加绑定uv属性的代码。
+```javascript
+uvLoc = gl.getAttribLocation(program, 'uv');
+gl.enableVertexAttribArray(uvLoc);
+gl.vertexAttribPointer(uvLoc, 2, gl.FLOAT, false, 4 * 8, 4 * 6);
+```
+将顶点数据最后两个`float`绑定到Shader的uv属性上。
+
+### 生成纹理
+我们有了坐标，那么纹理数据怎么获取呢？下面是获取代码。
+```javascript
+function makeTexture() {
+    woodTexture = gl.createTexture();
+    woodTexture.isReady = false;
+    woodImage = new Image();
+    woodImage.crossOrigin = "";
+    woodImage.onload = function () {
+        gl.bindTexture(gl.TEXTURE_2D, woodTexture);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA,gl.UNSIGNED_BYTE, woodImage);
+        gl.texParameterf(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameterf(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.bindTexture(gl.TEXTURE_2D, null);
+        woodTexture.isReady = true;
+    }
+    woodImage.src = "http://www.gltech.win/public/webgl-experiment/wood.png";
+}
+```
+`gl.texImage2D`用来把图片数据传递为WebGL系统。`gl.texParameterf`用来设置图片的相关参数。`gl.TEXTURE_MAG_FILTER`和`gl.TEXTURE_MIN_FILTER`分别代表图片放大或者缩小时的采样。`gl.LINEAR`代表采样的方式，还可以使用`gl.NEAREST`进行采样，`gl.NEAREST`方式直接采样坐标点最近的像素，速度比较快，`gl.LINEAR`会采样多个颜色算加权平均，效果会更好。可以根据实际情况选择。
+
+> 如果图片和你的网页不在一个域下，需要设置跨域`woodImage.crossOrigin = "";`。
+
+### 绑定和使用纹理
+有了纹理，接下来就要把它传递给Shader，前面我们已经把每个顶点的纹理坐标传递给了Vertex Shader。在Vertex Shader中新增了属性`attribute vec2 uv;`，以及`varying vec2 fragUV;`。Vertex Shader做的事情就是把`uv`直接传递给Fragment Shader，让它去处理。
+```c
+attribute vec4 position;
+attribute vec3 normal;
+attribute vec2 uv;
+
+varying vec3 fragNormal;
+varying vec2 fragUV;
+
+uniform float elapsedTime;
+uniform mat4 projectionMatrix;
+uniform mat4 cameraMatrix;
+uniform mat4 modelMatrix;
+void main() {
+   fragNormal = normal;
+   fragUV = uv;
+   gl_Position = projectionMatrix * cameraMatrix * modelMatrix * position;
+}
+```
+Fragment Shader中增加了`uniform sampler2D diffuseMap;`，`sampler2D`是纹理的参数类型。然后将`diffuseMap`在纹理坐标`fragUV`上的像素颜色作为基本色`vec4 materialColor = texture2D(diffuseMap, fragUV);`。`texture2D`函数用来采样纹理在某个`uv`坐标下的颜色，返回值类型是`vec4`。
+```c
+precision highp float;
+
+varying vec3 fragNormal;
+varying vec2 fragUV;
+
+uniform float elapsedTime;
+uniform vec3 lightDirection;
+uniform mat4 normalMatrix;
+
+uniform sampler2D diffuseMap;
+
+void main(void) {
+    vec3 normalizedLightDirection = normalize(-lightDirection);
+    vec3 transformedNormal = normalize((normalMatrix * vec4(fragNormal, 1.0)).xyz);
+
+    float diffuseStrength = dot(normalizedLightDirection, transformedNormal);
+    diffuseStrength = clamp(diffuseStrength, 0.0, 1.0);
+    vec3 diffuse = vec3(diffuseStrength);
+
+    vec3 ambient = vec3(0.3);
+
+    vec4 finalLightStrength = vec4(ambient + diffuse, 1.0);
+    vec4 materialColor = texture2D(diffuseMap, fragUV);
+
+    gl_FragColor = finalLightStrength * materialColor;
+}
+```
+回到JS代码。将我们生成的纹理绑定到`uniform` `diffuseMap`上。
+```javascript
+if (woodTexture.isReady) {
+  var diffuseLoc = gl.getUniformLocation(program, "diffuseMap");
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, woodTexture);
+  gl.uniform1i(diffuseLoc, 0);
+}
+```
+绑定纹理的流程是：
+1. 激活纹理的某个通道` gl.activeTexture(gl.TEXTURE0);`。通道0是默认激活的，所以本例中这一句也可以不写。
+1. 绑定生成的纹理到`gl.TEXTURE_2D`， `gl.bindTexture(gl.TEXTURE_2D, woodTexture);`，注意这里是绑定到`gl.TEXTURE_2D`而不是`gl.TEXTURE0`。
+1. 将0传递给`uniform` `diffuseMap`,如果激活的是`gl.TEXTURE1`就传递1，以此类推。
+
+到此，纹理的基本使用方法就介绍完了。
+
+> 注意，作为纹理的图片的尺寸最好是2的n次方，比如1024，512。一方面提高性能，另一方面不是所有的3D图形处理系统都支持非2的n次方尺寸的纹理。
