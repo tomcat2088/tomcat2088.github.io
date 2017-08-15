@@ -4,7 +4,7 @@ title: 渐变二维码
 date: 2017-08-15 16:47:34 +0800
 categories: iOS开发
 ---
-
+### [获取示例代码](https://github.com/SquarePants1991/ColorfulQRCode)
 ### 前言
 工作中有一个需求，将服务端已经生成好的黑白二维码变成渐变的二维码，具体效果如下。
 ![](http://upload-images.jianshu.io/upload_images/2949750-60979934c5048ed0.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
