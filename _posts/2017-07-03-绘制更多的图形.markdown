@@ -7,7 +7,8 @@ categories: 学习OpenGLES系列文章
 
 
 
-> 本文所用的代码在`https://github.com/SquarePants1991/OpenGLESLearn.git`的`chapter4`分支中。
+### [获取示例代码](https://github.com/SquarePants1991/OpenGLESLearn)，本文代码在分支chapter4中。
+***
 
 前面几篇文章介绍了基本的OpenGL ES绘制流程和Shader的基本语法。本文主要扩展一下绘制方面的知识，会介绍到绘制三角带，三角扇形，直线，直线带，直线环，点。和三角形一样，它们的绘制都是通过调用`glDrawArrays(几何形状类型, 0, 顶点数);`完成的，Shader属性的激活和传值也是一模一样的，所以我把这些操作提取到一个新的方法里面。
 ```

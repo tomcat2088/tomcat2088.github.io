@@ -6,7 +6,8 @@ categories: 学习OpenGLES系列文章
 ---
 
 
-> 本文所用的代码在`https://github.com/SquarePants1991/OpenGLESLearn.git`的`chapter5`分支中。
+### [获取示例代码](https://github.com/SquarePants1991/OpenGLESLearn)，本文代码在分支chapter5中。
+***
 
 在介绍本文的代码之前，先要了解一个概念：矩阵。学过线性代数的朋友应该都知道矩阵相当于是一个二维数组，有自己的运算规则。下面就通过几个例子简单了解一下矩阵的特性。
 

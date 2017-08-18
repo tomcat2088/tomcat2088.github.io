@@ -5,7 +5,8 @@ date: 2017-07-03 19:41:40 +0800
 categories: 学习OpenGLES系列文章
 ---
 
-> 本文所用的代码在`https://github.com/SquarePants1991/OpenGLESLearn.git`的`chapter8`分支中。
+### [获取示例代码](https://github.com/SquarePants1991/OpenGLESLearn)，本文代码在分支chapter8中。
+***
 
 经过前面7篇文章的铺垫，绘制正方体已经不是什么难事了。正方体其实就是由6个矩形组成的几何体，X，Y，Z轴上各两个矩形。下面是Z轴上两个矩形的示意图。
 

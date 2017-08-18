@@ -5,8 +5,8 @@ date:   2017-06-28 16:15:25 +0800
 categories: 学习OpenGLES系列文章
 ---
 
-
-> 本文所用的代码在`https://github.com/SquarePants1991/OpenGLESLearn.git`的`chapter3`分支中。
+### [获取示例代码](https://github.com/SquarePants1991/OpenGLESLearn)，本文代码在分支chapter3中。
+***
 
 上一篇文章中我们有说到OpenGL的渲染流程。
 
