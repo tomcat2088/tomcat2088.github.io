@@ -6,7 +6,9 @@ categories: 学习OpenGLES系列文章
 ---
 
 ### [获取示例代码](https://github.com/SquarePants1991/OpenGLESLearn)，本文代码在分支chapter1中。
-
+***
+    
+        
 最近一段时间在研究AR，为了熟悉3D渲染的相关知识，把OpenGL ES研究了一下。后续会写一些OpenGL ES系列的文章，内容上会由浅入深。
 
 第一篇主要说一下如何在iOS里配置一个基本的OpenGL ES项目。
