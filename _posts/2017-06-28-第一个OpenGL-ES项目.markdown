@@ -5,19 +5,15 @@ date:   2017-06-28 16:13:25 +0800
 categories: 学习OpenGLES系列文章
 ---
 
+### [获取示例代码](https://github.com/SquarePants1991/OpenGLESLearn)，本文代码在分支chapter1中。
 
-
-最近一段时间在研究AR，为了熟悉3D渲染的相关知识，把OpenGL ES研究了一下。后续会写一些OpenGL ES系列的文章，内容上会由浅入深，相关代码会直接开源在Github上。想要学习OpenGL ES的朋友可以去看一下。
+最近一段时间在研究AR，为了熟悉3D渲染的相关知识，把OpenGL ES研究了一下。后续会写一些OpenGL ES系列的文章，内容上会由浅入深。
 
 第一篇主要说一下如何在iOS里配置一个基本的OpenGL ES项目。
 > 我写这篇文章的时候Xcode里面已经没有OpenGL ES的项目模板了，苹果只留下了`SpriteKit`,`SceneKit`,`Metal`的项目模板，估计是为了大力推广自家的高层和底层的SDK。所以现在只能从`Single View Application`开始。
 
-最方便的开始方法是直接签出我放在Github上的项目 
-`git clone https://github.com/SquarePants1991/OpenGLESLearn.git`   
-切换到 `branch chapter1`
-`cd OpenGLESLearn`
-`git checkout chapter1`
-编译运行，如果一切没问题，可以看到一个红色的ViewController。
+最方便的开始方法是直接使用我的示例。
+编译运行本文的示例项目，如果一切没问题，可以看到一个红色的ViewController。
 
 ![](http://upload-images.jianshu.io/upload_images/2949750-642724d5ec425df5.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
 
