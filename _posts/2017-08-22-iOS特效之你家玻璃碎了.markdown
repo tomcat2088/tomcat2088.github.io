@@ -5,10 +5,10 @@ date: 2017-08-22 14:53:43 +0800
 categories: iOS开发
 ---
 
-### [点击获取本文示例代码](https://github.com/SquarePants1991/BrokenGlassEffect)
+### [点击获取本文示例代码](https://github.com/SquarePants1991/BrokenGlassEffect){:target="_blank"}
 
 ### 前言
-最近逛博客看到了一篇帖子，里面介绍了自己如何设计一套星球大战主题的UI，里面有一个界面破碎的特效，看着很炫酷，那篇文章的作者使用了UIDynamics，UIKit，OpenGL分别实现了效果。于是我就寻思如何使用Metal实现这样的效果。这是[那篇博客的链接](https://yalantis.com/blog/uidynamics-uikit-or-opengl-3-types-of-ios-animations-for-the-star-wars/)。下面是Metal版本的效果预览，目前还没有和界面集成，只是在一张静态图上做的破碎效果。我增加了一些边界碰撞反弹，纯属娱乐。
+最近逛博客看到了一篇帖子，里面介绍了自己如何设计一套星球大战主题的UI，里面有一个界面破碎的特效，看着很炫酷，那篇文章的作者使用了UIDynamics，UIKit，OpenGL分别实现了效果。于是我就寻思如何使用Metal实现这样的效果。这是[那篇博客的链接](https://yalantis.com/blog/uidynamics-uikit-or-opengl-3-types-of-ios-animations-for-the-star-wars/){:target="_blank"}。下面是Metal版本的效果预览，目前还没有和界面集成，只是在一张静态图上做的破碎效果。我增加了一些边界碰撞反弹，纯属娱乐。
 ![](http://upload-images.jianshu.io/upload_images/2949750-2038570fee130ac1.jpg?imageMogr2/auto-orient/strip)
 
 ### 代码
