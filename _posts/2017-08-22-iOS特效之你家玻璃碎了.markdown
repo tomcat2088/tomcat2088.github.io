@@ -1,0 +1,196 @@
+---
+layout: post
+title: iOS特效之你家玻璃碎了
+date: 2017-08-22 14:53:43 +0800
+categories: iOS开发
+---
+
+### [点击获取本文示例代码](https://github.com/SquarePants1991/BrokenGlassEffect)
+
+### 前言
+最近逛博客看到了一篇帖子，里面介绍了自己如何设计一套星球大战主题的UI，里面有一个界面破碎的特效，看着很炫酷，那篇文章的作者使用了UIDynamics，UIKit，OpenGL分别实现了效果。于是我就寻思如何使用Metal实现这样的效果。这是[那篇博客的链接](https://yalantis.com/blog/uidynamics-uikit-or-opengl-3-types-of-ios-animations-for-the-star-wars/)。下面是Metal版本的效果预览，目前还没有和界面集成，只是在一张静态图上做的破碎效果。我增加了一些边界碰撞反弹，纯属娱乐。
+![](http://upload-images.jianshu.io/upload_images/2949750-2038570fee130ac1.jpg?imageMogr2/auto-orient/strip)
+
+### 代码
+本文的代码在`BrokenGlassEffectView`文件中，它继承于`MetalBaseView`，`MetalBaseView`提供了使用Metal所需要的基础方法，`BrokenGlassEffectView`只需要在update和draw方法中实现逻辑刷新和绘制即可。
+
+### 原理
+要做这样的特效，主要分两步，切割图片，运动模拟。首先将图片切割成小方块，然后使用重力模型让小方块落下来。第一步切割可以使用两种方式：
+1. 给每个小方块创建一个四边形，并配置好UV，显示图片对应的部分。假设有n个小方块，如果使用三角形绘制，就需要6 * n个顶点。每个顶点有5个float，代表位置和uv。
+1. 每个小方块使用一个顶点绘制，绘制时使用point绘制模式，将point_size设置成小方块大小，这样只需要n个顶点。本文采用的就是这种方式，这种方式唯一的缺点是小方块只能是正方形。
+第二步就很简单了，只需要使用加速度即可。
+
+### 顶点生成
+我们计算出需要切割成几行几列，然后生成顶点数组。
+```swift
+private func buildPointData() -> [Float] {
+    var vertexDataArray: [Float] = []
+    let pointSize: Float = 12
+    let viewWidth: Float = Float(UIScreen.main.bounds.width)
+    let viewHeight: Float = Float(UIScreen.main.bounds.height)
+    let rowCount = Int(viewHeight / pointSize) + 1
+    let colCount = Int(viewWidth / pointSize) + 1
+    let sizeXInMetalTexcoord: Float = pointSize / viewWidth * 2.0
+    let sizeYInMetalTexcoord: Float = pointSize / viewHeight * 2.0
+    pointTransforms = [matrix_float4x4].init()
+    pointMoveInfo = [PointMoveInfo].init()
+    for row in 0..<rowCount {
+        for col in 0..<colCount {
+            let centerX = Float(col) * sizeXInMetalTexcoord + sizeXInMetalTexcoord / 2.0 - 1.0
+            let centerY = Float(row) * sizeYInMetalTexcoord + sizeYInMetalTexcoord / 2.0 - 1.0
+            vertexDataArray.append(centerX)
+            vertexDataArray.append(centerY)
+            vertexDataArray.append(0.0)
+            vertexDataArray.append(Float(col) / Float(colCount))
+            vertexDataArray.append(Float(row) / Float(rowCount))
+            
+            pointTransforms.append(GLKMatrix4Identity.toFloat4x4())
+            pointMoveInfo.append(PointMoveInfo.defaultMoveInfo(centerX: centerX, centerY: centerY))
+        }
+    }
+    
+    uniforms.pointTexcoordScaleX = sizeXInMetalTexcoord / 2.0
+    uniforms.pointTexcoordScaleY = sizeYInMetalTexcoord / 2.0
+    uniforms.pointSizeInPixel = pointSize
+    return vertexDataArray
+}
+```
+这里有一点要注意，Metal里的坐标系是x轴从-1（左）到1（右），y轴从1（上）到-1（下）。所以我生成顶点坐标时都把坐标规范到了-1到1这个范围。 这里除了生成顶点，还计算了点纹理坐标需要的缩放量`pointTexcoordScaleX，pointTexcoordScaleY`，并且把点的像素大小传递给Uniforms。这个Uniforms会在后面传递给Shader。关于点纹理坐标需要的缩放量我会在后面介绍它的作用。`pointTransforms`和`pointMoveInfo`保存了每个点的运动信息，这里对他们进行了初始化。
+然后我们在`setupRenderAssets`中初始化顶点Buffer。
+```swift
+// 构建顶点
+self.vertexArray = buildPointData()
+let vertexBufferSize = MemoryLayout<Float>.size * self.vertexArray.count
+self.vertexBuffer = device.makeBuffer(bytes: self.vertexArray, length: vertexBufferSize, options: MTLResourceOptions.cpuCacheModeWriteCombined)
+```
+### 更新运动信息
+下面我们在update方法中更新运动信息。每个点都有以下运动信息。x，y轴的速度，x，y轴的加速度，点最初的中心位置originCenterX，originCenterY，点的位移translateX，translateY。
+```swift
+struct PointMoveInfo {
+    var xSpeed: Float
+    var ySpeed: Float
+    var xAccelerate: Float
+    var yAccelerate: Float
+    var originCenterX: Float
+    var originCenterY: Float
+    var translateX: Float
+    var translateY: Float
+  
+    ...
+}
+```
+我们使用这些信息就可以对点进行运动模拟。首先我们处理y轴上的速度，每次update，速度会随着加速度改变，如果超过了最大速度，那么就等于最大速度，因为我这里的速度是负的，所以用的是小于。所以准确来说应该是速度的绝对值超过了最大速度的绝对值。
+```swift
+pointMoveInfo[i].ySpeed += Float(deltaTime) * pointMoveInfo[i].yAccelerate
+if pointMoveInfo[i].ySpeed < maxYSpeed {
+    pointMoveInfo[i].ySpeed = maxYSpeed
+}
+```
+然后是位移。并且用位移数据生成Shader使用的矩阵。
+```swift
+pointMoveInfo[i].translateX += Float(deltaTime) * pointMoveInfo[i].xSpeed
+pointMoveInfo[i].translateY += Float(deltaTime) * pointMoveInfo[i].ySpeed
+let newMatrix = GLKMatrix4MakeTranslation(pointMoveInfo[i].translateX, pointMoveInfo[i].translateY, 0)
+pointTransforms[i] = newMatrix.toFloat4x4()
+```
+最后我做了边界检测，遇到边界则反弹并且有衰减。
+```swift
+let realY = pointMoveInfo[i].translateY + pointMoveInfo[i].originCenterY
+let realX = pointMoveInfo[i].translateX + pointMoveInfo[i].originCenterX
+if realY <= -1.0 {
+    pointMoveInfo[i].ySpeed = -pointMoveInfo[i].ySpeed * 0.6
+    if fabs(pointMoveInfo[i].ySpeed) < 0.01 {
+        pointMoveInfo[i].ySpeed = 0
+    }
+}
+if realX <= -1.0 || realX >= 1.0 {
+    pointMoveInfo[i].xSpeed = -pointMoveInfo[i].xSpeed * 0.6
+    if fabs(pointMoveInfo[i].xSpeed) < 0.01 {
+        pointMoveInfo[i].xSpeed = 0
+    }
+}
+```
+
+### 渲染
+顶点和运动信息万事具备，可以渲染了。我们把顶点Buffer，纹理，Uniforms，运动信息pointTransforms都传递给Shader，接下来就轮到Shader表演了。
+```swift
+override func draw(renderEncoder: MTLRenderCommandEncoder) {
+    renderEncoder.setVertexBuffer(self.vertexBuffer, offset: 0, index: 0)
+    renderEncoder.setFragmentTexture(self.imageTexture, index: 0)
+    
+    let uniformBuffer = device.makeBuffer(bytes: self.uniforms.data(), length: Uniforms.sizeInBytes(), options:
+MTLResourceOptions.cpuCacheModeWriteCombined)
+    renderEncoder.setVertexBuffer(uniformBuffer, offset: 0, index: 1)
+    renderEncoder.setFragmentBuffer(uniformBuffer, offset: 0, index: 0)
+    
+    let transformsBufferSize = MemoryLayout<matrix_float4x4>.size * pointTransforms.count
+    let transformsBuffer = device.makeBuffer(bytes: pointTransforms, length: transformsBufferSize, options:
+MTLResourceOptions.cpuCacheModeWriteCombined)
+    renderEncoder.setVertexBuffer(transformsBuffer, offset: 0, index: 2)
+    
+    renderEncoder.drawPrimitives(type: .point, vertexStart: 0, vertexCount: self.vertexArray.count / 5)
+}
+```
+
+### Shader
+我们先来看看Shader中定义的结构体。输入的顶点`VertexIn`中包含位置和点所在位置的信息，点所在位置已经被规范化到0到1的区间了。输出到Fragment Shader的`VertexOut`结构包含处理后的位置，点所在位置的信息和点的像素尺寸。`Uniforms`里包含点纹理坐标的缩放量以及点的像素大小。
+```cpp
+struct VertexIn
+{
+    packed_float3  position;
+    packed_float2  pointPosition;
+};
+
+struct VertexOut
+{
+    float4  position [[position]];
+    float2  pointPosition;
+    float pointSize [[ point_size ]];
+};
+
+struct Uniforms
+{
+    packed_float2 pointTexcoordScale;
+    float pointSizeInPixel;
+};
+```
+
+接下来我们看看Vertex Shader。主要做了三件事情。
+1. 将输入的位置信息使用运动信息transform进行变换。
+1. 把点规范化后的位置信息原封不动的传给Fargment Shader。
+1. 把点的像素大小传递给point_size。
+```cpp
+vertex VertexOut passThroughVertex(uint vid [[ vertex_id ]],
+                                   const device VertexIn* vertexIn [[ buffer(0) ]],
+                                   const device Uniforms& uniforms [[ buffer(1) ]],
+                                   const device float4x4* transforms [[ buffer(2) ]])
+{
+    VertexOut outVertex;
+    VertexIn inVertex = vertexIn[vid];
+    outVertex.position = transforms[vid] * float4(inVertex.position, 1.0);
+    outVertex.pointPosition = inVertex.pointPosition;
+    outVertex.pointSize = uniforms.pointSizeInPixel;
+    return outVertex;
+};
+```
+
+最后轮到我们的Fragment Shader登场了。这里的核心就是计算UV，将点纹理坐标`pointCoord`在y轴上翻转后乘以点纹理缩放量求解出额外的UV偏移。然后以点的位置信息为基础UV，两者相加。最后将相加后的UV在Y轴上翻转就得到可以使用的UV了。从diffuse纹理上采样，然后返回采样到的颜色。
+```cpp
+constexpr sampler s(coord::normalized, address::repeat, filter::linear);
+
+fragment float4 passThroughFragment(VertexOut inFrag [[stage_in]],
+                                    float2 pointCoord  [[point_coord]],
+                                     texture2d<float> diffuse [[ texture(0) ]],
+                                    const device Uniforms& uniforms [[ buffer(0) ]])
+{
+    float2 additionUV = float2((pointCoord[0]) * uniforms.pointTexcoordScale[0], (1.0 - pointCoord[1]) * uniforms.pointTexcoordScale[1]);
+    float2 uv = inFrag.pointPosition + additionUV;
+    uv = float2(uv[0], 1.0 - uv[1]);
+    float4 finalColor = diffuse.sample(s, uv);
+    return finalColor;
+};
+```
+到此，Shader就介绍完了，还是很简单的，代码量并不大。主要流程就是VertexShader处理运动信息，FragmentShader处理图片在点上的着色。
+
+### 总结
+本文使用的方法类似于一个小型的粒子系统，使用点精灵(Point Sprites)技术比较高效的实现了碎片的效果。我们可以在update中使用其他的运动模拟算法实现类似于爆炸，旋涡等效果，如果读者有兴趣，可以自己尝试一下。
