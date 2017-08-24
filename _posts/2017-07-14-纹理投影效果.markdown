@@ -5,7 +5,8 @@ date: 2017-07-14 15:16:27 +0800
 categories: 学习OpenGLES系列文章
 ---
 
-> 本文所用的代码在`https://github.com/SquarePants1991/OpenGLESLearn.git`的`chapter21`分支中。
+### [获取示例代码](https://github.com/SquarePants1991/OpenGLESLearn)，本文代码在分支chapter21中。
+***
 
 本文作为OpenGL ES高级篇的开篇，将为大家介绍如何把一张纹理贴图投影到复杂的几何体上。下面是例子运行的结果。
 ![](http://upload-images.jianshu.io/upload_images/2949750-30a6368056fcdfd6.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)

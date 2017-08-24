@@ -5,7 +5,8 @@ date: 2017-07-03 19:42:28 +0800
 categories: 学习OpenGLES系列文章
 ---
 
-> 本文所用的代码在`https://github.com/SquarePants1991/OpenGLESLearn.git`的`chapter18`分支中。
+### [获取示例代码](https://github.com/SquarePants1991/OpenGLESLearn)，本文代码在分支chapter18中。
+***
 
 在[基本光照](http://www.jianshu.com/p/9f41a7272c22)中为大家介绍了环境光和漫反射光构成的基本光照模型。本文将为大家介绍Blinn-Phong光照模型，通过环境光，漫反射光和高光渲染出更加真实的物体。
 

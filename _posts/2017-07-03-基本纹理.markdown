@@ -5,7 +5,8 @@ date: 2017-07-03 19:41:51 +0800
 categories: 学习OpenGLES系列文章
 ---
 
-> 本文所用的代码在`https://github.com/SquarePants1991/OpenGLESLearn.git`的`chapter10`分支中。
+### [获取示例代码](https://github.com/SquarePants1991/OpenGLESLearn)，本文代码在分支chapter10中。
+***
 
 纹理通常来说就是一张图片，我们为每一个顶点指定纹理坐标，然后就可以在Shader中获取相应的纹理像素点颜色了。
 ### 纹理坐标

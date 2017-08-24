@@ -5,7 +5,8 @@ date: 2017-07-03 19:42:08 +0800
 categories: 学习OpenGLES系列文章
 ---
 
-> 本文所用的代码在`https://github.com/SquarePants1991/OpenGLESLearn.git`的`chapter14`分支中。
+### [获取示例代码](https://github.com/SquarePants1991/OpenGLESLearn)，本文代码在分支chapter14中。
+***
 
 本文主要讲解OpenGL中另一个优化技巧，使用顶点索引渲染物体。上一篇文章的例子中渲染正方体需要一个包含36个顶点的数组。
 > 本文修改的顶点数据都在`Cube.m`中。

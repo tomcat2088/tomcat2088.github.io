@@ -5,7 +5,8 @@ date: 2017-07-03 19:42:04 +0800
 categories: 学习OpenGLES系列文章
 ---
 
-> 本文所用的代码在`https://github.com/SquarePants1991/OpenGLESLearn.git`的`chapter13`分支中。
+### [获取示例代码](https://github.com/SquarePants1991/OpenGLESLearn)，本文代码在分支chapter13中。
+***
 
 本文将要介绍OpenGL ES的一个优化技巧，使用VBO和VAO减少CPU和GPU之间的数据传递，提高绘制速度。我们先来回顾一下之前绘制图形用到的代码。
 ```

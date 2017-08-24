@@ -5,7 +5,8 @@ date: 2017-07-03 19:42:00 +0800
 categories: 学习OpenGLES系列文章
 ---
 
-> 本文所用的代码在`https://github.com/SquarePants1991/OpenGLESLearn.git`的`laser`分支中。
+### [获取示例代码](https://github.com/SquarePants1991/OpenGLESLearn)，本文代码在分支laser中。
+***
 
 本文主要介绍如何使用2个四边形实现一个简单的激光效果。下面是最终效果图。
 ![](http://upload-images.jianshu.io/upload_images/2949750-afcd970ea1f0b1c9.gif?imageMogr2/auto-orient/strip)

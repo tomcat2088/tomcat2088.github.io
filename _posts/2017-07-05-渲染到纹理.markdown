@@ -4,7 +4,9 @@ title: 渲染到纹理
 date: 2017-07-05 15:30:14 +0800
 categories: 学习OpenGLES系列文章
 ---
-> 本文所用的代码在`https://github.com/SquarePants1991/OpenGLESLearn.git`的`chapter20`分支中。
+
+### [获取示例代码](https://github.com/SquarePants1991/OpenGLESLearn)，本文代码在分支chapter20中。
+***
 
 本文将介绍渲染到纹理技术。之前的例子都是将3D物体渲染到屏幕上，在iOS中GLKView为我们做好了渲染到屏幕的所有准备工作，我们只需要调用Open GL ES的绘制方法就可以轻松的渲染到屏幕。那么我们接下来了解一下GLKView为我们做了哪些准备工作。
 

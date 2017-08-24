@@ -5,7 +5,8 @@ date: 2017-07-03 19:42:14 +0800
 categories: 学习OpenGLES系列文章
 ---
 
-> 本文所用的代码在`https://github.com/SquarePants1991/OpenGLESLearn.git`的`chapter15`分支中。
+### [获取示例代码](https://github.com/SquarePants1991/OpenGLESLearn)，本文代码在分支chapter15中。
+***
 
 本文将要介绍如何使用代码绘制一个圆柱体，通过绘制圆柱体可以更好的掌握法线，UV，TriangleFan，TriangleStrip等相关知识。在绘制之前，先进行一些准备工作。
 

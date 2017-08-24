@@ -5,7 +5,8 @@ date: 2017-07-03 19:42:23 +0800
 categories: 学习OpenGLES系列文章
 ---
 
-> 本文所用的代码在`https://github.com/SquarePants1991/OpenGLESLearn.git`的`chapter17`分支中。
+### [获取示例代码](https://github.com/SquarePants1991/OpenGLESLearn)，本文代码在分支chapter17中。
+***
 
 OBJ文件是Alias Wavefront公司为它的一套基于工作站的3D建模和动画软件"Advanced Visualizer"开发的一种标准3D模型文件格式，它是基于纯文本的一种文件，我们可以很方便的解析其中的数据，本文将介绍OBJ的基本数据格式和解析方法。
 

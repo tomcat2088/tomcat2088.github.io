@@ -5,7 +5,8 @@ date: 2017-07-03 19:42:32 +0800
 categories: 学习OpenGLES系列文章
 ---
 
-> 本文所用的代码在`https://github.com/SquarePants1991/OpenGLESLearn.git`的`chapter19`分支中。
+### [获取示例代码](https://github.com/SquarePants1991/OpenGLESLearn)，本文代码在分支chapter19中。
+***
 
 本文将给大家介绍法线贴图的相关知识，在游戏中由于GPU资源有限，尤其是在移动设备中，所以无法使用大量的三角形来表示3D模型的细节。这时候法线贴图就成为了折中的渲染方案，既能够带来不错的细节表现效果，还可以减少资源的消耗。
 ###### 未使用法线贴图的Cube
