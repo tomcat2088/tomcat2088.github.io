@@ -107,6 +107,7 @@ if (animationPercent <= animationFirstStagePercent) {
 
 * ##### 根据移动轴上动画的进度`moveAxisAnimationPercent`和缩放轴的缩放量`scaleAxisCurrentValue`计算最终顶点的位置。
 ```c
+
 float newMoveAxisValue = inVertex.position[moveAxis] + moveMaxDisplacement * moveAxisAnimationPercent;
 float newScaleAxisValue = inVertex.position[scaleAxis] - (inVertex.position[scaleAxis] - uniforms.gatherPoint[scaleAxis]) * (1 - scaleAxisCurrentValue);
 
