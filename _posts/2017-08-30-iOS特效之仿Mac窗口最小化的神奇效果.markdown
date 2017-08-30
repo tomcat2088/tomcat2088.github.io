@@ -4,11 +4,11 @@ title: iOS特效之仿Mac窗口最小化的神奇效果
 date: 2017-08-30 15:08:48 +0800
 categories: iOS开发
 ---
-### [点击获取示例代码](https://github.com/SquarePants1991/MagicalTransition)
+### [点击获取示例代码](https://github.com/SquarePants1991/MagicalTransition){:target="_blank"}
 
 
 ### 前言
-这次仿照Mac窗口最小化时的神奇效果（官方的中文版本是这么叫的，听起来很尴尬），做了一个iOS版本的。基础代码都沿用自[iOS特效之破碎的ViewController](http://www.gltech.win/ios%E5%BC%80%E5%8F%91/2017/08/23/iOS%E7%89%B9%E6%95%88%E4%B9%8B%E7%A0%B4%E7%A2%8E%E7%9A%84ViewController.html)。先来看一下效果图。
+这次仿照Mac窗口最小化时的神奇效果（官方的中文版本是这么叫的，听起来很尴尬），做了一个iOS版本的。基础代码都沿用自[iOS特效之破碎的ViewController](http://www.gltech.win/ios%E5%BC%80%E5%8F%91/2017/08/23/iOS%E7%89%B9%E6%95%88%E4%B9%8B%E7%A0%B4%E7%A2%8E%E7%9A%84ViewController.html){:target="_blank"}。先来看一下效果图。
 ![](http://upload-images.jianshu.io/upload_images/2949750-d1cbe401ab908395.jpg?imageMogr2/auto-orient/strip)
 
 ### 原理
