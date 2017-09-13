@@ -1,0 +1,122 @@
+---
+layout: post
+title: 教你实现SkyBox
+date: 2017-09-13 18:24:42 +0800
+categories: 学习OpenGLES系列文章
+---
+
+### [获取示例代码](https://github.com/SquarePants1991/OpenGLESLearn){:target="_blank"}，本文代码在分支chapter26中。
+***
+
+![占位图之神保佑我吧！](http://upload-images.jianshu.io/upload_images/2949750-acc7c2df8c037df0.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+
+### 前言
+不知道大家是否还记得[基于CubeMap的反射效果](http://www.jianshu.com/p/936dd66f5135){:target="_blank"}里介绍的CubeMap，本文将使用CubeMap来制作3D游戏中的一个经典技术，天空盒（SkyBox）。老规矩，先来看下效果图。效果中的地形模型在前面的文章中已经介绍过了。没看过的可以[点此查看](http://www.jianshu.com/p/2bed156e3236){:target="_blank"}。
+![](http://upload-images.jianshu.io/upload_images/2949750-7845aa432d2554ec.gif?imageMogr2/auto-orient/strip)
+
+### 原理
+SkyBox正如其名，它是基于正方体模型的渲染技术。将6个方向拍下来的天空图片分别贴在正方体的对应面上，从内部观察正方体，就可以得到一个密闭的天空环境了。下面是一张典型的SkyBox贴图。
+
+![](http://upload-images.jianshu.io/upload_images/2949750-1447e7527774f76b.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+可以把它分成上下左右前后六张图，然后创建CubeMap。标准化ModelMatrix矩阵处理后的顶点位置，就可以用来在CubeMap上进行采样了。渲染SkyBox时不需要使用光照模型，直接使用采样CubeMap得到的颜色即可。所以需要为天空盒单独写一个Fragment Shader。
+
+### 天空盒几何体
+首先我们为天空盒准备基本的Cube几何体，创建SkyBox类，让它继承Cube类，这样就具备了渲染一个Cube的能力。然后我们对`draw`方法进行一些特殊处理。因为我们需要在内部观察这个Cube，所以我们需要让这个Cube的正面被裁剪，反面显示出来。` glCullFace(GL_FRONT);`正是用来做这件事情。渲染完后我们还需要将裁减状态回归到裁减背面。至于`glDepthMask(GL_FALSE);`的作用，我会在后面提到。
+```objc
+- (void)draw:(GLContext *)glContext {
+    glCullFace(GL_FRONT);
+    glDepthMask(GL_FALSE);
+    [super draw:glContext];
+    glDepthMask(GL_TRUE);
+    glCullFace(GL_BACK);
+}
+```
+
+### 准备天空CubeMap
+接下来我们准备用于渲染天空盒的CubeMap，用于生成CubeMap的6张图已经在项目中包含。
+
+![](http://upload-images.jianshu.io/upload_images/2949750-126b7f7314431576.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+使用GLKit提供的API可以很方便的生成CubeMap。
+```objc
+- (void)createCubeTexture {
+    NSMutableArray *files = [NSMutableArray new];
+    for (int i = 0; i < 6; ++i) {
+        NSString *filename = [NSString stringWithFormat:@"cube-%d", i + 1];
+        NSString *filePath = [[NSBundle mainBundle] pathForResource:filename ofType:@"tga"];
+        [files addObject:filePath];
+    }
+    NSError *error;
+    self.cubeTexture = [GLKTextureLoader cubeMapWithContentsOfFiles:files options:nil error:&error];
+}
+```
+`cubeMapWithContentsOfFiles`接受的图片文件顺序为`Right(右), Left(左), Top(上), Bottom(下), Front(前), Back(后)`，这个顺序可以在API的注释中找到。生成好`cubeTexture`后，后面就可以传递给天空盒的Fragment Shader直接使用了。
+
+### Fragment Shader
+我为SkyBox编写了新的Fragment Shader ， frag_skybox.glsl。内容非常简单，生成CubeMap的采样向量，然后返回采样结果。
+```c
+precision highp float;
+
+varying vec2 fragUV;
+varying vec3 fragPosition;
+
+uniform samplerCube envMap;
+uniform mat4 modelMatrix;
+void main(void) {
+    vec3 sampleVector = normalize(modelMatrix * vec4(fragPosition, 1.0)).xyz;
+    gl_FragColor = textureCube(envMap, sampleVector);
+}
+```
+正如前言所说，SkyBox的渲染不需要光照模型。在生成SkyBox模型时，将这个Fragment Shader用作SkyBox的渲染。为了使天空看起来更真实，我们需要把天空盒缩放到足够大，离我们足够远。这里我用了1000的缩放量。同时你还要注意天空盒没有超出你的视距。你如果单独给天空盒指定一个足够视距的投影矩阵那是最好。
+```objc
+- (void)createSkyBox {
+    NSString *vertexShaderPath = [[NSBundle mainBundle] pathForResource:@"vertex" ofType:@".glsl"];
+    NSString *fragmentShaderPath = [[NSBundle mainBundle] pathForResource:@"frag_skybox" ofType:@".glsl"];
+    GLContext *skyGlContext = [GLContext contextWithVertexShaderPath:vertexShaderPath fragmentShaderPath:fragmentShaderPath];
+    
+    self.skyBox = [[SkyBox alloc] initWithGLContext:skyGlContext diffuseMap:nil normalMap:nil];
+    self.skyBox.modelMatrix = GLKMatrix4MakeScale(1000, 1000, 1000);
+}
+```
+
+### 和地形一起渲染
+我们希望天空应该总是在所有场景物体之后，所以渲染时，先渲染天空盒，在渲染其他物体。并且在渲染天空盒时禁用深度写入
+，就是前面用到的` glDepthMask(GL_FALSE);`所做的事。这样渲染完天空盒后，深度缓冲区中所有的深度值依旧时1.0，后续渲染的物体就必然在天空盒的前面了。下面是渲染代码。
+```objc
+- (void)drawObjects {
+    
+    [self.skyBox.context active];
+    [self.skyBox.context setUniformMatrix4fv:@"projectionMatrix" value:self.projectionMatrix];
+    [self.skyBox.context setUniformMatrix4fv:@"cameraMatrix" value:self.cameraMatrix];
+    [self.skyBox.context bindCubeTexture:self.cubeTexture to:GL_TEXTURE4 uniformName:@"envMap"];
+    [self.skyBox draw: self.skyBox.context];
+    
+    [self.objects enumerateObjectsUsingBlock:^(GLObject *obj, NSUInteger idx, BOOL *stop) {
+        [obj.context active];
+        [obj.context setUniform1f:@"elapsedTime" value:(GLfloat)self.elapsedTime];
+        [obj.context setUniformMatrix4fv:@"projectionMatrix" value:self.projectionMatrix];
+        [obj.context setUniformMatrix4fv:@"cameraMatrix" value:self.cameraMatrix];
+        [obj.context setUniform3fv:@"eyePosition" value:self.eyePosition];
+        [obj.context setUniform3fv:@"light.direction" value:self.light.direction];
+        [obj.context setUniform3fv:@"light.color" value:self.light.color];
+        [obj.context setUniform1f:@"light.indensity" value:self.light.indensity];
+        [obj.context setUniform1f:@"light.ambientIndensity" value:self.light.ambientIndensity];
+        [obj.context setUniform3fv:@"material.diffuseColor" value:self.material.diffuseColor];
+        [obj.context setUniform3fv:@"material.ambientColor" value:self.material.ambientColor];
+        [obj.context setUniform3fv:@"material.specularColor" value:self.material.specularColor];
+        [obj.context setUniform1f:@"material.smoothness" value:self.material.smoothness];
+        
+        [obj.context setUniform1i:@"useNormalMap" value:self.useNormalMap];
+        
+        [obj.context bindCubeTexture:self.cubeTexture to:GL_TEXTURE4 uniformName:@"envMap"];
+        
+        [obj draw:obj.context];
+    }];
+}
+```
+
+### 扩展
+除了天空盒，还有天空穹，形象来说就是用一个半球盖在场景上，贴在半球上的贴图也和天空盒不同，大致如下图所示。和我们用手机拍的全景图很像。
+![](http://upload-images.jianshu.io/upload_images/2949750-628c511bac90fbf0.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+
+### 总结
+本文使用CubeMap实现了常用的游戏技术SkyBox，当然你也可以使用其他方式为Cube进行贴图。比如把6张图放在一起，然后为Cube设置适当的UV映射。读者可以去寻找或者自己制作其他环境的天空贴图，譬如夜晚，日落等等，放在项目中观察效果。
