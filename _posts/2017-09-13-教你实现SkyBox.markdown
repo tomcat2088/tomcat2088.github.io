@@ -8,8 +8,6 @@ categories: 学习OpenGLES系列文章
 ### [获取示例代码](https://github.com/SquarePants1991/OpenGLESLearn){:target="_blank"}，本文代码在分支chapter26中。
 ***
 
-![占位图之神保佑我吧！](http://upload-images.jianshu.io/upload_images/2949750-acc7c2df8c037df0.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
-
 ### 前言
 不知道大家是否还记得[基于CubeMap的反射效果](http://www.jianshu.com/p/936dd66f5135){:target="_blank"}里介绍的CubeMap，本文将使用CubeMap来制作3D游戏中的一个经典技术，天空盒（SkyBox）。老规矩，先来看下效果图。效果中的地形模型在前面的文章中已经介绍过了。没看过的可以[点此查看](http://www.jianshu.com/p/2bed156e3236){:target="_blank"}。
 ![](http://upload-images.jianshu.io/upload_images/2949750-7845aa432d2554ec.gif?imageMogr2/auto-orient/strip)
