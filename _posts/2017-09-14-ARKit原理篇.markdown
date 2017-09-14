@@ -1,0 +1,88 @@
+---
+layout: post
+title: ARKit原理篇
+date: 2017-09-14 09:38:01 +0800
+categories: iOS开发
+---
+
+### [获取示例代码](https://github.com/SquarePants1991/OpenGLESLearn){:target="_blank"}，本文代码在分支ARKit中。
+***
+
+iOS11推出了新框架ARKit，通过ARKit和SceneKit可以很方便的制作AR App。苹果也提供了AR基本的应用框架，你可以直接从此开始你的AR App的开发。
+![](http://upload-images.jianshu.io/upload_images/2949750-319596df30538983.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+不过本系列文章将使用OpenGL ES为ARKit提供渲染支持，接下来我们先去了解一下ARKit的理论相关知识。
+
+### AR基本概念
+AR最基本的概念就是将虚拟的计算机图形和真实环境结合的技术。该技术有很多种实现方式。
+* 使用2D或者3D图形装饰人脸，常见于一些相机和视频类App，主要使用人脸识别追踪技术。
+* 基于标记的3D模型放置，比如基于AR的故事书，阴阳师的现世召唤。标记可以是简单的黑框包裹的标记，也可以是一张复杂图片的特征点训练数据。如果你感兴趣可以前往[ARToolKit](https://archive.artoolkit.org/)，这是一个开源的AR框架，主要用于基于标记的AR。最近出ARToolkit6 Beta了，不知道有没有新的功能开放。
+* 追踪真实环境的特征点，计算真实摄像机在真实环境的位置。所谓特征点，就是图片中灰度变化比较剧烈的位置，所以想要更精准稳定的计算，就需要真实环境的颜色变化比较丰富。ARKit就是使用这种原理进行摄像机定位的。
+
+### 世界追踪（WorldTracking）
+通过追踪真实世界的特征点，计算真实摄像机位置并应用到3D世界的虚拟摄像机是AR实现中最重要的部分。计算结果的精确性直接影响到渲染出来的结果。ARKit使用`ARSession`来管理整个AR处理流程，包括摄像机位置的计算。
+```objc
+#pragma make - AR Control
+- (void)setupAR {
+    if (@available(iOS 11.0, *)) {
+        self.arSession = [ARSession new];
+        self.arSession.delegate = self;
+    }
+}
+
+- (void)runAR {
+    if (@available(iOS 11.0, *)) {
+        ARWorldTrackingSessionConfiguration *config = [ARWorldTrackingSessionConfiguration new];
+        config.planeDetection = ARPlaneDetectionHorizontal;
+        [self.arSession runWithConfiguration:config];
+    }
+}
+
+- (void)pauseAR {
+    if (@available(iOS 11.0, *)) {
+        [self.arSession pause];
+    }
+}
+```
+使用`ARSession`的方式很简单，初始化，设置`delegate`，开启`ARSession`需要传入一个配置`ARWorldTrackingSessionConfiguration`，`ARWorldTrackingSessionConfiguration`代表AR系统会追踪真实世界的特征点，计算摄像机位置。苹果以后也有可能会出`ARMarkerTrackingSessionConfiguration`之类用来识别追踪标记的配置吧。`ARSession`开启后会启动相机，并且会通过传感器感知手机位置。借用WWDC中的一张图。
+
+
+![](http://upload-images.jianshu.io/upload_images/2949750-0dc82afcd5ecd884.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+
+
+`ARSession`综合相机捕获的视频流和位置信息生成一系列连续的`ARFrame`。
+```objc
+- (void)session:(ARSession *)session didUpdateFrame:(ARFrame *)frame {
+...
+}
+```
+每个`ARFrame`包含了从相机捕捉的图片，相机位置相关信息等。在这个方法里我们需要绘制相机捕捉的图片。根据相机位置等信息绘制3D物体等。
+
+### 平面检测
+ARKit提供了另一个很酷的功能，检测真实世界的平面，并提供一个`ARPlaneAnchor`对象描述平面的位置，大小，方向等信息。
+```objc
+- (void)runAR {
+    if (@available(iOS 11.0, *)) {
+        ARWorldTrackingSessionConfiguration *config = [ARWorldTrackingSessionConfiguration new];
+        config.planeDetection = ARPlaneDetectionHorizontal;
+        [self.arSession runWithConfiguration:config];
+    }
+}
+```
+上面的`config.planeDetection = ARPlaneDetectionHorizontal;`设置了检测平面的类型是水平。不过目前也就只有这一个选项可以选。如果ARKit检测到了平面，会通过`delegate`中的方法`- (void)session:(ARSession *)session didAddAnchors:(NSArray<ARAnchor*>*)anchors`提供数据给你。你可以判断`ARAnchor`是不是`ARPlaneAnchor`来判断是否检测到了平面。`ARAnchor`用来表示3D物体在真实环境的位置。你只要保持你的3D物体和`ARAnchor`的3D变换同步就能实现AR效果了。
+
+### Hit Test
+Hit Test可以让你方便的在检测到的平面上放置物体。当你点击屏幕时，使用Hit Test可以检测出你点击的位置有哪些平面，并且提供`ARAnchor`用于设置放置物体的位置。
+```objc
+[frame hitTest:CGPointMake(0.5, 0.5) types:ARHitTestResultTypeExistingPlane];
+```
+使用ARFrame的`hitTest`方法，第一个传入的点取值范围从`(0,0)`到`(1,1)`，第二个参数代表可以检测哪些对象。可以检测到的对象如下。
+* `ARHitTestResultTypeFeaturePoint`，根据距离最近的特征点检测出来的连续表面。
+* `ARHitTestResultTypeEstimatedHorizontalPlane`，非精准方式计算出来与重力垂直的平面。
+* `ARHitTestResultTypeExistingPlane`, 已经检测出来的平面，检测时忽略平面本身大小，把它看做一个无穷大的平面。
+* `ARHitTestResultTypeExistingPlaneUsingExtent`, 已经检测出来的平面，检测时考虑平面本身的大小。
+检测成功则返回`NSArray<ARHitTestResult *> *`，`ARHitTestResult`中包含检测类型，相交点的距离，平面的`ARAnchor`。注意只有检测到`ARHitTestResultTypeExistingPlane`和`ARHitTestResultTypeExistingPlaneUsingExtent`才会有`ARAnchor`。这四个检测类型是可以通过`|`的方式同时存在的，比如`ARHitTestResultTypeEstimatedHorizontalPlane |  ARHitTestResultTypeExistingPlane`。
+
+### 光线强度调节
+ARKit还提供了一个检测光照强度的功能，主要为了让3D模型的光照和环境的光照强度保持一致。在`ARFrame`中有一个`lightEstimate`的变量，如果检测光照强度成功，则会有值。值的类型为`ARLightEstimate`，其中只包含一个变量`ambientIntensity`。在3D光照模型中，它对应环境光，它的值从0 ~ 2000。使用OpenGL渲染时，可以使用这个值调整光照模型中的环境光强度。
+
+ARKit的理论知识差不多到此结束了，下一篇将会介绍如何使用OpenGL ES渲染`ARFrame`里的内容。
