@@ -11,7 +11,7 @@ categories: iOS开发
 > 如果你想了解ATRKit的基础知识，请访问[ARKit原理篇](http://www.gltech.win/ios%E5%BC%80%E5%8F%91/2017/09/14/ARKit%E5%8E%9F%E7%90%86%E7%AF%87.html){:target="_blank"}
 
 
-> 本文所用OpenGL基础代码来自[OpenGL ES系列](http://www.jianshu.com/p/df4c8f9bc08d)，具备渲染几何体，纹理等基础功能，实现细节将不赘述。
+> 本文所用OpenGL基础代码来自[OpenGL ES系列](http://www.jianshu.com/p/df4c8f9bc08d){:target="_blank"}，具备渲染几何体，纹理等基础功能，实现细节将不赘述。
 
 集成ARKit的关键代码都在`ARGLBaseViewController`中。我们来看一下它的代码。
 ### 处理ARFrame
