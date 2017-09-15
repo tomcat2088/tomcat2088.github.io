@@ -205,6 +205,7 @@ figure {
     border-radius: $border-radius;
     -webkit-transition: $global-transition;
     transition: $global-transition;
+    display: block;
   }
 
   > a {
@@ -280,6 +281,10 @@ svg:not(:root) {
  *    </ul>
  *  </nav>
  */
+
+ a {
+   text-decoration: none;
+ }
 
 nav {
   ul {

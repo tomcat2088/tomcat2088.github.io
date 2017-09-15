@@ -3,10 +3,10 @@ main:
   - title: "首页"
     url: /
   - title: "学习OpenGLES系列文章"
-    url: /categories/%23学习opengles系列文章/
+    url: /categories/学习opengles系列文章/
   - title: "学习WebGL"
-    url: /categories/%23学习webgl/
+    url: /categories/学习webgl/
   - title: "iOS开发"
-    url: /categories/%23iOS开发/
+    url: /categories/iOS开发/
   - title: "资源"
-    url: /categories/%23资源/
+    url: /categories/资源/

@@ -1,0 +1,11 @@
+---
+layout: archive
+---
+
+<h2 class="archive__subtitle">最新文章</h2>
+
+{% for post in site.posts %}
+  {% if post.categories[0] contains page.title %}
+    {% include archive-single.html %}
+  {% endif %}
+{% endfor %}
