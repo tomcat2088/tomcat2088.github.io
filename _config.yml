@@ -28,6 +28,12 @@ version:             1.0.0
 theme: minimal-mistakes-jekyll
 gems:
   - jekyll-feed
+  - jekyll-paginate
+  - jekyll-sitemap
+  - jekyll-gist
+  - jemoji
+  - jekyll-archives
+
 markdown: kramdown
 kramdown:
   syntax_highlighter_opts:
@@ -44,3 +50,24 @@ kramdown:
 #   - vendor/cache/
 #   - vendor/gems/
 #   - vendor/ruby/
+
+jekyll-archives:
+  enabled:
+    - categories
+    - tags
+  layouts:
+    category: archive-taxonomy
+    tag: archive-taxonomy
+  permalinks:
+    category: /categories/#:name/
+    tag: /tags/#:name/
+
+friend_links:
+  - title: 简书
+    url: http://www.jianshu.com/u/e6367cf15710
+  - title: CocoaChina
+    url: http://blog.cocoachina.com/621486
+  - title: 推酷
+    url: http://www.tuicool.com/
+  - title: outofmemory
+    url: http://outofmemory.cn/
