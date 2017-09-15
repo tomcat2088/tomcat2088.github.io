@@ -2,7 +2,7 @@
   <h3>分类</h3>
   {% assign categories_list = site.categories %}
       {% for category in categories_list %}
-        <a href="/categories/%23{{ category[0] }}"><span class="nav__sub-title">{{ category[0] }} [{{ category[1].size }}]</span></a>
+        <a href="/categories/{{ category[0] }}.html"><span class="nav__sub-title">{{ category[0] }} [{{ category[1].size }}]</span></a>
       {% endfor %}
   {% assign categories_list = nil %}
 
