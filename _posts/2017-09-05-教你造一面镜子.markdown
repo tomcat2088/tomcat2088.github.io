@@ -1,0 +1,145 @@
+---
+layout: post
+title: 教你造一面镜子
+date: 2017-09-05 18:28:40 +0800
+categories: 学习OpenGLES系列文章
+---
+
+### [获取示例代码](https://github.com/SquarePants1991/OpenGLESLearn){:target="_blank"}，本文代码在分支chapter25中。
+***
+
+### 前言
+在[基于CubeMap的反射效果](http://www.jianshu.com/p/936dd66f5135){:target="_blank"}一文中，介绍到如何使用CubeMap让物体反射环境的光，从而制造逼真的3D效果。本文将介绍另一种反射效果的制作，模拟真实平面镜的反射。反射效果是实时的，而且可以反射任何3D模型。下面是一张比较丑的效果图，例子里面设置的灯光比较暗，导出gif后效果不好，最好还是下载例子自己运行看的比较清楚。
+![](http://upload-images.jianshu.io/upload_images/2949750-28fd8f4473c97836.jpg?imageMogr2/auto-orient/strip)
+
+### 原理
+我将使用高中关于镜面反射的物理知识来作为实现镜面效果的理论基石。下面是2D下的关于镜面反射的一张图。
+
+![](http://upload-images.jianshu.io/upload_images/2949750-b7847c6b033ec34f.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+镜子上显示的图像，可以看做镜像过去的另一个人所看到的的情景。使用OpenGL的术语来说就是把摄像机以镜子所在的平面做镜像，得到的镜像摄像机所观察到的世界，就是镜面上应该显示的内容。基本原理虽然很简单，但实现过程中也会遇到诸多问题。比如如何把镜像摄像机的渲染结果贴到镜面上，镜像摄像机被其他物体遮挡该如何处理。
+
+### 写代码之前
+本文代码依然延续学习OpenGL ES的项目代码，任何之前已经介绍的代码将不再介绍。所以你真的想看懂本文的话，至少对OpenGL和本系列Demo项目有基本的了解。
+
+### 封装摄像机
+之前的代码中一直使用GLK的方法生成观察矩阵，这次我对摄像机进行了封装，主要是为了更方便的进行镜像。摄像机的类是`Camera`。主要功能是生成摄像机和镜像摄像机。摄像机使用向前的向量`forward`，向上的向量`up`和位置`position`管理自身信息。镜像时将这三个变量分别求解出镜像值即可。求解向量的镜像主要使用了向量的反射公式，具体大家可以看代码。这里就不详细解释了。
+```objectivec
+@interface Camera : NSObject
+@property (assign, nonatomic) GLKVector3 forward;
+@property (assign, nonatomic) GLKVector3 up;
+@property (assign, nonatomic) GLKVector3 position;
+
+- (void)setupCameraWithEye:(GLKVector3)eye lookAt:(GLKVector3)lookAt up:(GLKVector3)up;
+- (void)mirrorTo:(Camera *)targetCamera plane:(GLKVector4)plane;
+- (GLKMatrix4)cameraMatrix;
+@end
+```
+在镜像方法`- (void)mirrorTo:(Camera *)targetCamera plane:(GLKVector4)plane;`中，使用`GLKVector4`表示平面，`x，y，z`表示法线，`w`表示在法线上移动的位移。
+
+### 渲染镜像摄像机内容
+想要把镜像摄像机的内容渲染到镜面的平面上，我们需要建立一个新的Framebuffer，并且绑定一个纹理到它的颜色附件中。这样就可以把镜像摄像机的内容[渲染到纹理](http://www.jianshu.com/p/eccb53001670){:target="_blank"}了。如果你看过[渲染到纹理](http://www.jianshu.com/p/eccb53001670){:target="_blank"}这一篇文章，下面的代码你就会感觉很熟悉。
+```objectivec
+- (void)createTextureFramebuffer:(CGSize)framebufferSize {
+    
+    glGenFramebuffers(1, &mirrorFramebuffer);
+    glBindFramebuffer(GL_FRAMEBUFFER, mirrorFramebuffer);
+    
+    // 生成颜色缓冲区的纹理对象并绑定到framebuffer上
+    glGenTextures(1, &mirrorTexture);
+    glBindTexture(GL_TEXTURE_2D, mirrorTexture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, framebufferSize.width, framebufferSize.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, mirrorTexture, 0);
+    
+    // 下面这段代码不使用纹理作为深度缓冲区。
+    GLuint depthBufferID;
+    glGenRenderbuffers(1, &depthBufferID);
+    glBindRenderbuffer(GL_RENDERBUFFER, depthBufferID);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT16, framebufferSize.width, framebufferSize.height);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depthBufferID);
+
+    GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    if (status != GL_FRAMEBUFFER_COMPLETE) {
+        // framebuffer生成失败
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+```
+接着我们在渲染主场景之前，把场景渲染到镜像专用的Framebuffer中。为了渲染镜像中观察者看到的景象，我将当前的观察矩阵设置为镜像摄像机`mirrorCamera`的观察矩阵，并且设置了新的Viewport匹配当前的Framebuffer大小，同时也设置了新的投影矩阵`mirrorProjectionMatrix`匹配新的Framebuffer的比例。至于`GL_CLIP_DISTANCE0_APPLE`裁剪平面相关的代码，我们后面再介绍。
+```objectivecc
+- (void)glkView:(GLKView *)view drawInRect:(CGRect)rect {
+    self.projectionMatrix = self.mirrorProjectionMatrix;
+    self.cameraMatrix = [self.mirrorCamera cameraMatrix];
+    glBindFramebuffer(GL_FRAMEBUFFER, mirrorFramebuffer);
+    glViewport(0, 0, 1024, 1024);
+    glClearColor(0.7, 0.7, 0.9, 1);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    self.clipplaneEnable = YES;
+    self.clipplane = GLKVector4Make(0, 0, 1, 0);
+    glEnable(GL_CLIP_DISTANCE0_APPLE);
+    [self drawObjects];
+    
+    glDisable(GL_CLIP_DISTANCE0_APPLE);
+    self.clipplaneEnable = NO;
+    self.projectionMatrix = self.viewProjectionMatrix;
+    self.cameraMatrix = [self.mainCamera cameraMatrix];
+    [view bindDrawable];
+    glClearColor(0.7, 0.7, 0.7, 1);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    [self drawObjects];
+    [self drawMirror];
+}
+```
+
+### Mirror模型的渲染
+Mirror继承于Plane，绘制一个四边形，目前并没有实现任何独特的代码，主要用于后期将镜面相关的逻辑移入其中。现在将它看做一个普通的四边形即可，在渲染它时，使用了特别编写的Shader `frag_mirror.glsl`。
+```c
+precision highp float;
+
+varying vec2 fragUV;
+varying vec3 fragPosition;
+
+uniform mat4 mirrorPVMatrix;
+uniform mat4 modelMatrix;
+uniform sampler2D diffuseMap;
+
+void main(void) {
+    vec4 positionInWordCoord = mirrorPVMatrix * modelMatrix * vec4(fragPosition, 1.0);
+    positionInWordCoord = positionInWordCoord / positionInWordCoord.w;
+    positionInWordCoord = (positionInWordCoord + 1.0) * 0.5;
+    gl_FragColor = texture2D(diffuseMap, positionInWordCoord.st);
+}
+```
+使用顶点位置最终投影到屏幕的坐标，计算UV，从镜像摄像机渲染出的纹理上采样。这个手法我们在[投影纹理](http://www.jianshu.com/p/23b45ea6bf7b){:target="_blank"}中有介绍到，相当于把镜像摄像机看到的内容按照镜像摄像机的VP矩阵投影到镜面的平面上。
+我们在主场景渲染时才渲染镜面模型。并且开启了`GL_CULL_FACE`，因为让反面在渲染时使用另一个法线进行镜像计算比较繁琐而且没有必要。在渲染过程中传入镜像摄像机和镜像投影的矩阵相乘结果`mirrorPVMatrix`，以及顶点着色器需要的`projectionMatrix`和`cameraMatrix`，用来参与常规顶点着色流程。
+```objectivec
+- (void)drawMirror {
+    glEnable(GL_CULL_FACE);
+    [self.mirror.context active];
+    [self.mirror.context setUniformMatrix4fv:@"projectionMatrix" value:self.projectionMatrix];
+    [self.mirror.context setUniformMatrix4fv:@"mirrorPVMatrix" value: GLKMatrix4Multiply(self.mirrorProjectionMatrix, [self.mirrorCamera cameraMatrix])];
+    [self.mirror.context setUniformMatrix4fv:@"cameraMatrix" value: self.cameraMatrix];
+    [self.mirror draw:self.mirror.context];
+    glDisable(GL_CULL_FACE);
+}
+```
+
+### 裁剪平面
+在前面我们提到过一个问题，如果镜像摄像机被遮挡应该怎么办。`glEnable(GL_CLIP_DISTANCE0_APPLE);`就是解决方案。裁剪平面在OpenGL中是直接支持的，但在OpenGL ES中需要使用苹果的扩展，所以`GL_CLIP_DISTANCE0_APPLE`后面有个`APPLE`。我们将平面以Vector4的表达方式传入Vertex Shader中，最终系统会将观察点到平面之间的点都忽略掉。这里我写死了`0，0，1，0`这个平面，当然你也可以动态获取mirror模型的平面法线，使用normalMatrix和`0，0，1，0`相乘。
+```objectivec
+self.clipplaneEnable = YES;
+self.clipplane = GLKVector4Make(0, 0, 1, 0);
+glEnable(GL_CLIP_DISTANCE0_APPLE);
+```
+在Vertex Shader中需要添加如下代码。
+```c
+if (clipplaneEnabled) {
+    gl_ClipDistance[0] = dot((modelMatrix * position).xyz, clipplane.xyz) + clipplane.w;
+}
+```
+
+### 总结
+本文使用了渲染到纹理，纹理投影，裁剪平面等技术实现了镜面效果。同时也涉及到了不少向量的计算，算是比较考验对OpenGL ES的熟练度，读者可以看完例子之后自己尝试去实现这个效果，了解一下自己对OpenGL ES的熟练程度。

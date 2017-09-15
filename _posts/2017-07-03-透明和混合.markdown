@@ -1,0 +1,140 @@
+---
+layout: post
+title: 透明和混合
+date: 2017-07-03 19:41:56 +0800
+categories: 学习OpenGLES系列文章
+---
+
+### [获取示例代码](https://github.com/SquarePants1991/OpenGLESLearn)，本文代码在分支chapter11中。
+***
+
+本文主要讲解OpenGL ES对于透明颜色的处理，在例子中我绘制了三个平面，分别赋予绿色半透明纹理，红色半透明纹理，和不透明纹理。
+
+![](http://upload-images.jianshu.io/upload_images/2949750-7b6401082d687e0f.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+
+首先为这三张图生成纹理。
+```
+- (void)genTexture {
+    NSString *opaqueTextureFile = [[NSBundle mainBundle] pathForResource:@"texture" ofType:@"jpg"];
+    NSString *redTransparencyTextureFile = [[NSBundle mainBundle] pathForResource:@"red" ofType:@"png"];
+    NSString *greenTransparencyTextureFile = [[NSBundle mainBundle] pathForResource:@"green" ofType:@"png"];
+    NSError *error;
+    self.opaqueTexture = [GLKTextureLoader textureWithContentsOfFile:opaqueTextureFile options:nil error:&error];
+    self.redTransparencyTexture = [GLKTextureLoader textureWithContentsOfFile:redTransparencyTextureFile options:nil error:&error];
+    self.greenTransparencyTexture = [GLKTextureLoader textureWithContentsOfFile:greenTransparencyTextureFile options:nil error:&error];
+}
+```
+接着将绘制平面的代码用一个方法封装。
+```
+- (void)drawPlaneAt:(GLKVector3)position texture:(GLKTextureInfo *)texture {
+    self.modelMatrix = GLKMatrix4MakeTranslation(position.x, position.y, position.z);
+    GLuint modelMatrixUniformLocation = glGetUniformLocation(self.shaderProgram, "modelMatrix");
+    glUniformMatrix4fv(modelMatrixUniformLocation, 1, 0, self.modelMatrix.m);
+    bool canInvert;
+    GLKMatrix4 normalMatrix = GLKMatrix4InvertAndTranspose(self.modelMatrix, &canInvert);
+    if (canInvert) {
+        GLuint modelMatrixUniformLocation = glGetUniformLocation(self.shaderProgram, "normalMatrix");
+        glUniformMatrix4fv(modelMatrixUniformLocation, 1, 0, normalMatrix.m);
+    }
+    
+    // 绑定纹理
+    GLuint diffuseMapUniformLocation = glGetUniformLocation(self.shaderProgram, "diffuseMap");
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, texture.name);
+    glUniform1i(diffuseMapUniformLocation, 0);
+    
+    [self drawRectangle];
+}
+```
+我要绘制三个平面，并且位置不一样，只要调用三次上面的方法就可以了。具体绘制代码如下。
+```
+- (void)glkView:(GLKView *)view drawInRect:(CGRect)rect {
+    [super glkView:view drawInRect:rect];
+  
+    GLuint projectionMatrixUniformLocation = glGetUniformLocation(self.shaderProgram, "projectionMatrix");
+    glUniformMatrix4fv(projectionMatrixUniformLocation, 1, 0, self.projectionMatrix.m);
+    GLuint cameraMatrixUniformLocation = glGetUniformLocation(self.shaderProgram, "cameraMatrix");
+    glUniformMatrix4fv(cameraMatrixUniformLocation, 1, 0, self.cameraMatrix.m);
+    
+    GLuint lightDirectionUniformLocation = glGetUniformLocation(self.shaderProgram, "lightDirection");
+    glUniform3fv(lightDirectionUniformLocation, 1,self.lightDirection.v);
+
+    [self drawPlaneAt:GLKVector3Make(0, 0, -0.3) texture:self.opaqueTexture];
+    [self drawPlaneAt:GLKVector3Make(0.2, 0.2, 0) texture:self.greenTransparencyTexture];
+    [self drawPlaneAt:GLKVector3Make(-0.2, 0.3, -0.5) texture:self.redTransparencyTexture];
+}
+```
+根据绘制平面Z轴的位置，红色平面在最下，不透明的在中间，绿色透明的在最上面。效果如下。
+
+![](http://upload-images.jianshu.io/upload_images/2949750-4d273826ee38d276.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+明显没有任何透明效果，如果要开启对透明的支持，需要调用`glEnable(GL_BLEND);`和`glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);`。我在`GLBaseViewController`的`setupContext`中设置了这两项。
+```
+- (void)setupContext {
+    // 使用OpenGL ES2, ES2之后都采用Shader来管理渲染管线
+    self.context = [[EAGLContext alloc] initWithAPI:kEAGLRenderingAPIOpenGLES2];
+    // 设置帧率为60fps
+    self.preferredFramesPerSecond = 60;
+    if (!self.context) {
+        NSLog(@"Failed to create ES context");
+    }
+    
+    GLKView *view = (GLKView *)self.view;
+    view.context = self.context;
+    view.drawableDepthFormat = GLKViewDrawableDepthFormat24;
+    view.drawableMultisample = GLKViewDrawableMultisample4X;
+    [EAGLContext setCurrentContext:self.context];
+    
+    // 设置OpenGL状态
+    glEnable(GL_DEPTH_TEST);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+}
+```
+`glEnable(GL_BLEND);`开启了颜色混合，`glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);`指定了混合方式。混合方式中有两个决定因素，将要混合的像素颜色的比例`Fs`和当前缓冲区像素颜色比例`Fd`,`Fs`和`Fd`是四维向量`(Fr, Fg, Fb, Fa)`，`Fr, Fg, Fb, Fa`分别代表每个颜色通道的混合比例。我们假定`Fs = (Fsr, Fsg, Fsb, Fsa)` `Fd = (Fdr, Fdg, Fdb, Fda)`,缓冲区像素颜色为`(Dr, Dg, Db, Da)`，要混合的像素颜色为`(Sr, Sg, Sb, Sa)`。`(Kr, Kg, Kb, Ka)`是每个通道的最大值。那么最终像素值为：
+```
+R = min(Kr, FsrSr + FdrDr)
+G = min(Kg,  FsgSg + FdgDg)
+B = min(Kb,  FsbSb + FdbDb)
+A = min(Ka, FsaSa + FdaDa)
+```
+下面是每个混合比例枚举对应的值，其中`Rs,Gs,Bs,As`是要混合的像素颜色，`Rd,Gd,Bd,Ad`是缓冲区中像素的颜色。`(kR, kG, kB, kA)`是每个通道的最大值。以`glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);`为例，`Fs`就是`As/kA, As/kA, As/kA, As/kA`,`Fd`就是`1 - As/kA, 1 - As/kA, 1 - As/kA, 1 - As/kA`。假设要混合的像素alpha值为0.4，那么最终的颜色就是0.4乘以要混合的像素颜色加上0.6乘以缓冲区的像素颜色。
+![](http://upload-images.jianshu.io/upload_images/2949750-7332ab7150519b51.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+
+
+`glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);`设置后效果如下。
+
+![](http://upload-images.jianshu.io/upload_images/2949750-60f9b58a10b94132.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+
+绿色透明平面和不透明的平面很好的混合了，但是和红色平面重叠的部分却有问题，重叠部分红色平面完全消失了。这是因为我们启用了深度测试，红色平面在绿色平面后面的部分在混合之前就已经被忽略掉了。为了解决这个问题，有个通用的办法，先绘制不透明物体，然后再绘制透明物体。绘制透明物体的时候设置`glDepthMask(false);`。`glDepthMask`为false时会禁止把当前的像素深度值写到深度缓冲区中，也就是说绘制透明物体的时候，深度测试永远都是和同一个深度值进行测试，也就不会存在透明物体之间相互遮挡的问题了。
+
+> 启用深度测试，每个像素写入缓冲区时也会写入z轴对应的深度，写入前会和当前的深度值对比，如果在当前深度的后面，就舍弃掉这个像素。
+
+下面是实现的代码。
+```
+- (void)glkView:(GLKView *)view drawInRect:(CGRect)rect {
+    [super glkView:view drawInRect:rect];
+  
+    GLuint projectionMatrixUniformLocation = glGetUniformLocation(self.shaderProgram, "projectionMatrix");
+    glUniformMatrix4fv(projectionMatrixUniformLocation, 1, 0, self.projectionMatrix.m);
+    GLuint cameraMatrixUniformLocation = glGetUniformLocation(self.shaderProgram, "cameraMatrix");
+    glUniformMatrix4fv(cameraMatrixUniformLocation, 1, 0, self.cameraMatrix.m);
+    
+    GLuint lightDirectionUniformLocation = glGetUniformLocation(self.shaderProgram, "lightDirection");
+    glUniform3fv(lightDirectionUniformLocation, 1,self.lightDirection.v);
+
+    [self drawPlaneAt:GLKVector3Make(0, 0, -0.3) texture:self.opaqueTexture];
+    
+    glDepthMask(false);
+    [self drawPlaneAt:GLKVector3Make(0.2, 0.2, 0) texture:self.greenTransparencyTexture];
+    [self drawPlaneAt:GLKVector3Make(-0.2, 0.3, -0.5) texture:self.redTransparencyTexture];
+    glDepthMask(true);
+
+}
+```
+效果如下。
+
+![](http://upload-images.jianshu.io/upload_images/2949750-56a55822e8451978.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+
+本文主要介绍了如何在OpenGL ES中混合多个透明色。一般来说，颜色混合通常只会用在一些粒子，光效等特殊场合，因为它会增加很多运算负担。下一篇中，会利用颜色混合实现一个简单的激光效果，下面是模拟器上的效果图。
+
+![](http://upload-images.jianshu.io/upload_images/2949750-afcd970ea1f0b1c9.gif?imageMogr2/auto-orient/strip)

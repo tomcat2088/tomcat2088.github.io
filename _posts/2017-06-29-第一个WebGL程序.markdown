@@ -1,0 +1,94 @@
+---
+layout: post
+title:  "第一个WebGL程序"
+date:   2017-06-29 16:13:25 +0800
+categories: 学习WebGL
+---
+
+这是学习WebGL系列的第一篇文章，我们将了解什么是WebGL以及使用WebGL的一个简单例子。
+
+### 什么是WebGL
+WebGL简单来说就是浏览器原生支持的一套3D绘制API。在WebGL出现前，想要在浏览器中绘制3D场景，是一件很繁琐的事情，没有统一的规范，一切都得靠插件。伴随着HTML5的到来，WebGL1.0, WebGL2.0规范相继推出，各大浏览器厂商纷纷开始实现WebGL接口。到目前为止，主流浏览器的最新版本都已经支持WebGL，譬如Chrome，Firefox，Opera，Safari。
+
+### WebGL和OpenGL的异同
+WebGL和OpenGL都带一个GL后缀，看起来很有关系，实际上关系很大。OpenGL有一个功能子集OpenGL ES，OpenGL ES由一系列的C函数组成，主要用在移动设备上。WebGL则是使用了Javascript将OpenGL ES进行了封装，你可以使用Javascript代替C在浏览器中进行OpenGL ES的编程。WebGL1.0是基于OpenGL ES2.0的封装，WebGL2.0是基于OpenGL ES3.0的封装。下面是浏览器对WebGL1.0和WebGL2.0支持的状况。WebGL1.0已经被广泛支持，WebGL2.0还有待提高。
+
+![](http://upload-images.jianshu.io/upload_images/2949750-7a603403e8ed8045.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+
+### 示例演示
+本系列全部使用JSRUN进行代码演示以及管理。JSRUN和JSFiddle几乎一模一样，都是在线编辑和演示JS代码的平台。因为JSRUN是国内的，所以速度比较稳定，就决定使用它进行本系列演示代码的管理。下面是本文的例子。
+
+<script async src="//jsrun.net/dQYKp/embed/all/dark/"></script>
+
+### 准备画布
+在编写WebGL代码之前，我们先要准备一个画布，用来绘制3D物体。如果浏览器不支持`canvas`，` Your browser doesn't appear to support the <canvas> element`将会被显示出来提醒用户。` <div id="glInfo" style=""></div>`将被用来显示fps信息。
+```html
+<div style="width: 100%; height: 300px; position:relative; background:rgba(0,0,0,0);">
+  <canvas id="glCanvas" width="400" height="300">
+    Your browser doesn't appear to support the 
+    <code><canvas></code> element.
+  </canvas>
+  <div id="glInfo" style=""></div>
+</div>
+```
+
+### 设置WebGL运行环境
+接下来我们通过JS代码准备WebGL运行需要的一些关键要素。首先获取到canvas元素，存储到全局变量canvas中。再通过canvas获取WebGL上下文对象gl，如果没有获取到有效的上下文，我们也可以友善的提醒用户。后面我们将使用这个上下文gl来进行一系列的WebGL相关操作。
+```javascript
+function setupGLEnv(canvasID) {
+    canvas = document.getElementById(canvasID);
+    gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+    if (!gl) {
+      alert('天呐！您的浏览器竟然不支持WebGL，快去更新浏览器吧。');
+    }
+}
+```
+
+### 渲染循环
+想要画面动起来，那就必须得循环。我们通过`requestAnimationFrame`来驱动`renderLoop`，这样`renderLoop`就会被循环调用。在`renderLoop`中通过`lastRenderTime`计算上一帧的消耗的时间`deltaTime`。`elapsedTime`是程序运行的总时间。这两个时间在制作动画时将会很有用。每过10帧，我们都会计算一次fps（frame per seconds，每秒的帧数）。将10帧消耗的总时间除以10得出一帧的平均时间，再用1000ms除以一帧的平均时间，得出fps的值了。最后我们在`<div id="glInfo" style=""></div>`中显示fps的值。
+```javascript
+function renderLoop() {
+  now = (new Date()).getTime();
+  deltaTime = now - lastRenderTime;
+  lastRenderTime = now;
+  elapsedTime += deltaTime;
+  
+  render(deltaTime, elapsedTime);
+  
+  collectedFrameDuration += deltaTime;
+  collectedFrameCount++;
+  if (collectedFrameCount >= 10) {
+    fps = parseInt(1000.0 * collectedFrameCount / collectedFrameDuration);
+    if (isNaN(fps) == false || fps < 1000) {
+      glInfoNode.textContent = "FPS: " + fps;
+    }
+    collectedFrameCount = 0;
+    collectedFrameDuration = 0;
+  }
+  requestAnimationFrame(renderLoop);
+}
+```
+
+### 渲染
+本文例子的渲染极其简单，使用红色清除canvas的所有像素。
+```javascript
+function render(deltaTime, elapesdTime) {
+    gl.clearColor(1.0, .0, .0, 0.0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+}
+```
+`gl`就是WebGL的上下文，我们通过`gl`来调用WebGL的相关方法。`clearColor`表示设置清除像素使用的颜色，参数是R,G,B,A，范围从0到1。`gl.clear(gl.COLOR_BUFFER_BIT);`表示清除缓冲区的颜色部分，至于还可以清除什么，请看后续文章。如果你对OpenGL ES很熟悉，是不是有种换汤不换药的感觉？
+
+### 把它们放到一起
+最后在`window.onload`中将上面的方法都连接起来。
+```javascript
+window.onload = function() {
+  setupGLEnv('glCanvas');
+  glInfoNode = document.getElementById("glInfo");
+  resize(canvas.parentElement.clientWidth, canvas.parentElement.clientHeight - 1);
+  renderLoop();
+}
+```
+先配置，再触发渲染循环，接下来`render`就会被循环调用了。
+
+本文主要对WebGL进行了简单的介绍，并用了一个极简的例子演示了WebGL的基本框架，下一篇将通过绘制一个三角形来介绍如何使用WebGL进行绘制。

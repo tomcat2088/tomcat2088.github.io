@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en-us">
+
+  {% include head.html %}
+
+  <body>
+  <div>
+
+  </div>
+    {% include sidebar.html %}
+
+    <!-- Wrap is the content to shift when toggling the sidebar. We wrap the
+         content to avoid any CSS collisions with our real content. -->
+    <div class="wrap">
+      <div class="masthead">
+        <div class="container">
+          <h3 class="masthead-title">
+            <a href="{{ site.baseurl }}/" title="Home">{{ site.title }}</a>
+            <small>{{ site.tagline }}</small>
+          </h3>
+        </div>
+      </div>
+      <div>
+      <div class="container content">
+      <h5 style="color: #aaaaaa">本博客内容皆为原创，如有转载，请注明出处。</h5>
+        {{ content }}
+      </div>
+<!--       <div class="container content">
+        <a id="tanx-a-mm_49939314_33450161_126968447"></a>
+      </div>
+      <div class="container content">
+        <a id="tanx-a-mm_49939314_33450161_126344402"></a>
+      </div>
+      <div class="container content">
+        <a id="tanx-a-mm_49939314_33450161_126344541"></a>
+      </div> -->
+    </div>
+
+    <label for="sidebar-checkbox" class="sidebar-toggle"></label>
+
+    <script>
+      (function(document) {
+        var toggle = document.querySelector('.sidebar-toggle');
+        var sidebar = document.querySelector('#sidebar');
+        var checkbox = document.querySelector('#sidebar-checkbox');
+
+        document.addEventListener('click', function(e) {
+          var target = e.target;
+
+          if(!checkbox.checked ||
+             sidebar.contains(target) ||
+             (target === checkbox || target === toggle)) return;
+
+          checkbox.checked = false;
+        }, false);
+      })(document);
+    </script>
+    <script>
+    var _hmt = _hmt || [];
+    (function() {
+      var hm = document.createElement("script");
+      hm.src = "https://hm.baidu.com/hm.js?e1fdb7f3d91d6035c7c63038ce0f28f6";
+      var s = document.getElementsByTagName("script")[0]; 
+      s.parentNode.insertBefore(hm, s);
+    })();
+    </script>
+    <!-- <script type="text/javascript">
+            tanx_s = document.createElement("script");
+            tanx_s.type = "text/javascript";
+            tanx_s.charset = "gbk";
+            tanx_s.id = "tanx-s-mm_49939314_33450161_126968447";
+            tanx_s.async = true;
+            tanx_s.src = "http://p.tanx.com/ex?i=mm_49939314_33450161_126968447";
+            tanx_h = document.getElementsByTagName("head")[0];
+            if(tanx_h)tanx_h.insertBefore(tanx_s,tanx_h.firstChild);
+    </script>
+    <script type="text/javascript">
+            tanx_s = document.createElement("script");
+            tanx_s.type = "text/javascript";
+            tanx_s.charset = "gbk";
+            tanx_s.id = "tanx-s-mm_49939314_33450161_126344402";
+            tanx_s.async = true;
+            tanx_s.src = "http://p.tanx.com/ex?i=mm_49939314_33450161_126344402";
+            tanx_h = document.getElementsByTagName("head")[0];
+            if(tanx_h)tanx_h.insertBefore(tanx_s,tanx_h.firstChild);
+    </script>
+    <script type="text/javascript">
+            tanx_s = document.createElement("script");
+            tanx_s.type = "text/javascript";
+            tanx_s.charset = "gbk";
+            tanx_s.id = "tanx-s-mm_49939314_33450161_126344541";
+            tanx_s.async = true;
+            tanx_s.src = "http://p.tanx.com/ex?i=mm_49939314_33450161_126344541";
+            tanx_h = document.getElementsByTagName("head")[0];
+            if(tanx_h)tanx_h.insertBefore(tanx_s,tanx_h.firstChild);
+    </script> -->
+
+    <div class="container content footer">
+      <span class=“copyright”>©2017-2020 handyTOOL</span>
+      <span class=“friend-link”><a href="http://www.jianshu.com/" target="_blank">简书</a></span>
+      <span class=“friend-link”><a href="http://www.cocoachina.com/" target="_blank">CocoaChina</a></span>
+      <span class=“friend-link”><a href="http://www.tuicool.com/" target="_blank">推酷</a></span>
+      <span class=“friend-link”><a href="http://outofmemory.cn/" target="_blank">outofmemory</a></span>
+    </div>
+  </body>
+</html>

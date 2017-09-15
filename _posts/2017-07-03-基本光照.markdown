@@ -1,0 +1,157 @@
+---
+layout: post
+title: 基本光照
+date: 2017-07-03 19:41:46 +0800
+categories: 学习OpenGLES系列文章
+---
+
+### [获取示例代码](https://github.com/SquarePants1991/OpenGLESLearn)，本文代码在分支chapter9中。
+***
+
+本文主要介绍如何使用Shader实现平行光的效果。什么是平行光呢？我们可以拿激光做比喻，平行光的方向不会随着离光源的距离而改变。所以我们在模拟平行光的时候仅仅需要使用一个光照方向即可。
+我们有了光照方向，接下来还需要一个重要数据，平面的朝向。一个平面如果刚好面朝光线，那自然是最亮的。当然还有些材质的平面可以反射光线，反射光线的强度和你观察的角度相关，不过这些本文都不会介绍。后面会有专门一篇介绍复杂的光照模型。
+我们用法线向量来表示平面朝向，在具体实现中，每个点都会有一个法线向量。所谓法线向量就是垂直于平面的一个三维向量，如下图所示。
+
+![](http://upload-images.jianshu.io/upload_images/2949750-75c4ac10e81a6a41.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+图中展示了两种法线向量的表示方法，左边是每个多边形的每个点有一个法线向量，右边是每个点有一个法线向量，共享点的法线向量是这个点在所有平面上的法线向量之和。法线向量应该总是被规范化成单位向量。本文的例子中使用的是左边的方式。
+> 如果你对向量相关的知识不是很了解，可以参考[百度百科](http://baike.baidu.com/link?url=TfkKTuR71bygPWK4LB7zKO6wqrhDLRQvJ0fZw1JGtzrAEYSjH1oq9qFMaW54hPja0a8-Rvm3kYntHl6vknfoD5sXWbMFd8yfTUJk6U_cdXi#3_3)
+
+有了法线向量和光照方向之后，只要将它们相乘即可得到光照强度。接下来开始分析代码。
+> 两个单位向量相乘，结果是cos(向量夹角)，夹角越大，cos(向量夹角)越小，刚好符合前面说的规律。
+
+首先我们来看Vertex Shader。
+```
+attribute vec4 position;
+attribute vec3 normal;
+
+uniform float elapsedTime;
+uniform mat4 projectionMatrix;
+uniform mat4 cameraMatrix;
+uniform mat4 modelMatrix;
+
+varying vec3 fragNormal;
+
+void main(void) {
+    mat4 mvp = projectionMatrix * cameraMatrix * modelMatrix;
+    fragNormal = normal;
+    gl_Position = mvp * position;
+}
+```
+我将`attribute vec4 color;`换成了`attribute vec3 normal;`，不再传递颜色数据，改为法线向量。然后将法线向量传递给Fragment Shader` fragNormal = normal;`。
+
+接下来是Fragment Shader。
+```
+precision highp float;
+
+varying vec3 fragNormal;
+
+uniform float elapsedTime;
+uniform vec3 lightDirection;
+uniform mat4 normalMatrix;
+
+void main(void) {
+    vec3 normalizedLightDirection = normalize(-lightDirection);
+    vec3 transformedNormal = normalize((normalMatrix * vec4(fragNormal, 1.0)).xyz);
+    
+    float diffuseStrength = dot(normalizedLightDirection, transformedNormal);
+    diffuseStrength = clamp(diffuseStrength, 0.0, 1.0);
+    vec3 diffuse = vec3(diffuseStrength);
+    
+    vec3 ambient = vec3(0.3);
+    
+    vec4 finalLightStrength = vec4(ambient + diffuse, 1.0);
+    vec4 materialColor = vec4(1.0, 0.0, 0.0, 1.0);
+    
+    gl_FragColor = finalLightStrength * materialColor;
+}
+```
+我增加了光线方向`uniform vec3 lightDirection;`，法线变换矩阵`uniform mat4 normalMatrix;`。
+> 法线不能直接使用modelMatrix进行变换，需要使用modelMatrix的逆转置矩阵，参考[维基百科](https://zh.wikipedia.org/wiki/%E6%B3%95%E7%BA%BF)
+
+因为光线是照射到平面的方向，而法线是从平面往外的方向，所以他们相乘之前需要把光照方向反过来，并且要规范化。
+```
+vec3 normalizedLightDirection = normalize(-lightDirection);
+```
+接着我们将法线变换后再规范化，我们就得到了关键的两个向量。下面是示意图。
+![](http://upload-images.jianshu.io/upload_images/2949750-167bdc4739e71821.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+将它们相乘最后得到`diffuse`，可以称它为漫反射强度。漫反射就是投射在粗糙表面上的光向各个方向反射的现象。我们求解`diffuse`就是模拟的漫反射现象。
+代码最后还有一个`vec3 ambient = vec3(0.3);`是什么呢？根据漫反射的公式，总会有强度为0的地方，为了使场景不那么暗，就增加了一个基本光照强度，也可称为环境光强度。
+环境光强度加上漫反射强度就是最后的光照强度`finalLightStrength`了。光照强度乘以材质本身的颜色`materialColor`得到最终的颜色，这里材质本身的颜色我用的是红色。
+
+看完Shader，我们回到OC代码。首先，我将绑定Shader属性color的代码改为了绑定normal。
+```
+- (void)bindAttribs:(GLfloat *)triangleData {
+    // 启用Shader中的两个属性
+    // attribute vec4 position;
+    // attribute vec4 color;
+    GLuint positionAttribLocation = glGetAttribLocation(self.shaderProgram, "position");
+    glEnableVertexAttribArray(positionAttribLocation);
+    GLuint colorAttribLocation = glGetAttribLocation(self.shaderProgram, "normal");
+    glEnableVertexAttribArray(colorAttribLocation);
+    
+    // 为shader中的position和color赋值
+    // glVertexAttribPointer (GLuint indx, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const GLvoid* ptr)
+    // indx: 上面Get到的Location
+    // size: 有几个类型为type的数据，比如位置有x,y,z三个GLfloat元素，值就为3
+    // type: 一般就是数组里元素数据的类型
+    // normalized: 暂时用不上
+    // stride: 每一个点包含几个byte，本例中就是6个GLfloat，x,y,z,r,g,b
+    // ptr: 数据开始的指针，位置就是从头开始，颜色则跳过3个GLFloat的大小
+    glVertexAttribPointer(positionAttribLocation, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(GLfloat), (char *)triangleData);
+    glVertexAttribPointer(colorAttribLocation, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(GLfloat), (char *)triangleData + 3 * sizeof(GLfloat));
+}
+```
+接着准备法线向量的数据。
+```
+- (void)drawXPlanes {
+    static GLfloat triangleData[] = {
+// X轴0.5处的平面
+      0.5,  -0.5,    0.5f, 1,  0,  0,
+      0.5,  -0.5f,  -0.5f, 1,  0,  0,
+      0.5,  0.5f,   -0.5f, 1,  0,  0,
+      0.5,  0.5,    -0.5f, 1,  0,  0,
+      0.5,  0.5f,    0.5f, 1,  0,  0,
+      0.5,  -0.5f,   0.5f, 1,  0,  0,
+// X轴-0.5处的平面
+      -0.5,  -0.5,    0.5f, -1,  0,  0,
+      -0.5,  -0.5f,  -0.5f, -1,  0,  0,
+      -0.5,  0.5f,   -0.5f, -1,  0,  0,
+      -0.5,  0.5,    -0.5f, -1,  0,  0,
+      -0.5,  0.5f,    0.5f, -1,  0,  0,
+      -0.5,  -0.5f,   0.5f, -1,  0,  0,
+    };
+    [self bindAttribs:triangleData];
+    glDrawArrays(GL_TRIANGLES, 0, 12);
+}
+```
+以X轴上的两个平面为例，X轴0.5处的平面法线方向是X轴正向，X轴-0.5处的平面法线方向是X轴反向。这样我们才能让朝外的面接收到光线。法线是三维向量，所以刚好填满了之前颜色的数据区间。
+
+下一步准备一个三维向量存放光照的方向。
+```
+@property (assign, nonatomic) GLKVector3 lightDirection; // 平行光光照方向
+```
+并给它赋值。让它向下照射，所以向量为-Y轴（0，-1，0）。
+```
+// 设置平行光方向
+self.lightDirection = GLKVector3Make(0, -1, 0);
+```
+最后给uniform光照方向和法线变换矩阵赋值。
+```
+bool canInvert;
+GLKMatrix4 normalMatrix = GLKMatrix4InvertAndTranspose(self.modelMatrix, &canInvert);
+if (canInvert) {
+    GLuint modelMatrixUniformLocation = glGetUniformLocation(self.shaderProgram, "normalMatrix");
+    glUniformMatrix4fv(modelMatrixUniformLocation, 1, 0, normalMatrix.m);
+}
+
+
+GLuint lightDirectionUniformLocation = glGetUniformLocation(self.shaderProgram, "lightDirection");
+glUniform3fv(lightDirectionUniformLocation, 1,self.lightDirection.v);
+```
+
+这里我们使用了GLKit的`GLKMatrix4InvertAndTranspose`计算modelMatrix的逆转置矩阵，然后传递给Shader。传递光照方向时使用`glUniform3fv`来传递三维数组。
+
+到此，基本的平行光光照模型就完成了。下面是效果图。
+![](http://upload-images.jianshu.io/upload_images/2949750-830b0b3caf67be14.gif?imageMogr2/auto-orient/strip)
+
+下一篇是基础篇的最后一篇，介绍纹理的加载和使用。后续会在进阶篇中介绍高级光照，3D模型加载，粒子系统等更深入的知识。

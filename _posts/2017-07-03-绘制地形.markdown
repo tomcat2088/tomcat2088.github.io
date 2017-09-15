@@ -1,0 +1,241 @@
+---
+layout: post
+title: 绘制地形
+date: 2017-07-03 19:42:18 +0800
+categories: 学习OpenGLES系列文章
+---
+
+### [获取示例代码](https://github.com/SquarePants1991/OpenGLESLearn)，本文代码在分支chapter16中。
+***
+
+本文将介绍如何使用一张灰度地形图片生成下面的地形模型。
+![](http://upload-images.jianshu.io/upload_images/2949750-b23098d77278269d.jpeg?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+
+本文用到的灰度地形图片如下
+
+![](http://upload-images.jianshu.io/upload_images/2949750-7f3926384f99e3f3.jpg?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+
+### 什么是地形模型
+地形模型一般是由NxN的网格构成，网格的点在y轴上的坐标由灰度地形图上相应的颜色决定。颜色越亮，高度越高。颜色每个通道的取值范围可以是0~ 255，通过公式转换，可以很容易的控制生成模型的高度。
+
+### 生成网格顶点数据
+上篇文章中，我们使用三角带生成圆柱体的中间部分。现在我们要用多个三角带来生成地形。
+
+![](http://upload-images.jianshu.io/upload_images/2949750-ed2b2a5c9e2a38e6.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+
+如何生成单个三角带我就不赘述了，上篇文章已经介绍了。下面主要介绍如何计算每个顶点的位置，法线和UV。
+
+### 计算顶点位置
+计算顶点位置之前，我们先要获取到灰度地形图的像素数据。因为我们需要知道指定点的像素颜色。
+```
+- (GLubyte *)dataFromImage:(UIImage *)img {
+    CGImageRef imageRef = [img CGImage];
+    size_t width = CGImageGetWidth(imageRef);
+    size_t height = CGImageGetHeight(imageRef);
+    
+    GLubyte *textureData = (GLubyte *)malloc(width * height * 4);
+    
+    CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
+    NSUInteger bytesPerPixel = 4;
+    NSUInteger bytesPerRow = bytesPerPixel * width;
+    NSUInteger bitsPerComponent = 8;
+    
+    CGContextRef context = CGBitmapContextCreate(textureData, width, height,
+                                                 bitsPerComponent, bytesPerRow, colorSpace,
+                                                 kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big);
+    CGColorSpaceRelease(colorSpace);
+    CGContextDrawImage(context, CGRectMake(0, 0, width, height), imageRef);
+    CGContextRelease(context);
+    return textureData;
+}
+```
+上面的代码将像素格式不确定的图片转换成4通道RGBA格式的图片数据。`textureData`的内存布局是`R，G，B，A，R，G，B，A，R，G，B，A，...`不停重复。位置`(x,y)`的像素数据在偏移量`y * 图片宽度 * 4 + x * 4`处。获取顶点位置的代码如下。
+```
+- (GLKVector3)vertexPosition:(int)col row:(int)row buffer:(unsigned char *)buffer bytesPerRow:(size_t)bytesPerRow bytesPerPixel:(size_t)bytesPerPixel {
+    long long offset = (int)(row / self.terrainSize.height * self.heightMap.size.height) * bytesPerRow + (int)(col / self.terrainSize.width * self.heightMap.size.width) * bytesPerPixel;
+    unsigned char r = buffer[offset];
+    GLfloat x = col;
+    GLfloat y = r / 255.0 * self.terrainHeight;
+    GLfloat z = row;
+    return GLKVector3Make(x, y, z);
+}
+```
+`bytesPerRow`是指图片一行的字节数，也就是` 图片宽度 * 4`，`bytesPerPixel`是每个像素的字节数，也就是`4`。使用red通道的值，计算出y轴上的坐标`  GLfloat y = r / 255.0 * self.terrainHeight;`。`self.terrainHeight`是可以配置的地形高度。`self.terrainSize`是地形的大小。` self.heightMap.size`是灰度图片的大小。通过计算`(int)(row / self.terrainSize.height * self.heightMap.size.height)`在图片上进行采样。
+
+### 计算法线
+因为我想给每个顶点指定唯一的法线，所以必须计算出顶点在每个面上的法线之和。在网格上每个顶点最多被4个面共享，也就是顶点的前后左右各有一个顶点。假设这四个顶点是`Va,Vb,Vc,Vd`，中间的点为`Vce`，那么第一个面的法线就是`(Vb - Vce) 叉乘 (Va - Vce)`，以此类推，算出四个法线，相加后归一化，就可以得到最终的法线了。因为边缘的顶点可能只被2或3个面共享，所以需要处理一下这种特殊情况。下面是法线计算代码。
+```
+- (GLKVector3)vertexNormal:(GLKVector3)position col:(int)col row:(int)row buffer:(unsigned char *)buffer bytesPerRow:(size_t)bytesPerRow bytesPerPixel:(size_t)bytesPerPixel {
+    GLKVector3 sides[4]; // 最多四条共享边
+    int sideCount = 0;
+    // 统计顶点有几条共享边，从而计算法线
+    if (col >= 1) {
+        //左边有共享边
+        GLKVector3 leftPosition = [self vertexPosition:col - 1 row:row buffer:buffer bytesPerRow:bytesPerRow bytesPerPixel:bytesPerPixel];
+        GLKVector3 vectorLeft = GLKVector3Subtract(leftPosition, position);
+        sides[sideCount] = vectorLeft;
+        sideCount++;
+    }
+    if (row >= 1) {
+        //前面有共享边
+        GLKVector3 frontPosition = [self vertexPosition:col row:row - 1 buffer:buffer bytesPerRow:bytesPerRow bytesPerPixel:bytesPerPixel];
+        GLKVector3 vectorFront = GLKVector3Subtract(frontPosition, position);
+        sides[sideCount] = vectorFront;
+        sideCount++;
+    }
+    if (col <= self.terrainSize.width - 1) {
+        //右边有共享边
+        GLKVector3 rightPosition = [self vertexPosition:col + 1 row:row buffer:buffer bytesPerRow:bytesPerRow bytesPerPixel:bytesPerPixel];
+        GLKVector3 vectorRight = GLKVector3Subtract(rightPosition, position);
+        sides[sideCount] = vectorRight;
+        sideCount++;
+    }
+    if (row <= self.terrainSize.width - 1) {
+        //后面有共享边
+        GLKVector3 backPosition = [self vertexPosition:col row:row + 1 buffer:buffer bytesPerRow:bytesPerRow bytesPerPixel:bytesPerPixel];
+        GLKVector3 vectorBack = GLKVector3Subtract(backPosition, position);
+        sides[sideCount] = vectorBack;
+        sideCount++;
+    }
+    
+    GLKVector3 normal = GLKVector3Make(0, 0, 0);
+    for (int i = 0; i < sideCount; ++i) {
+        GLKVector3 vec = sides[i];
+        if (i == sideCount - 1 && i != 3) {
+            continue;
+        }
+        GLKVector3 vec2 = i == sideCount - 1 ? sides[0] : sides[i + 1];
+        normal = GLKVector3Add(normal, GLKVector3CrossProduct(vec2, vec));
+    }
+    return GLKVector3Normalize(normal);
+}
+```
+`GLKVector3CrossProduct`就是用作叉乘的方法，两个向量叉乘得出的向量将垂直于它们两个，也就是法向量。
+
+### 构建地形几何体
+有了获取位置和法线的方法，就可以很方便的构建几何体了。
+```
+- (void)buildGeometry {
+    CGImageRef image = self.heightMap.CGImage;
+    size_t bytesPerRow = CGImageGetBytesPerRow(image);
+    size_t bitsPerComponent = CGImageGetBitsPerComponent(image);
+    size_t bitesPerPixel = CGImageGetBitsPerPixel(image);
+    size_t bytesPerPixel = bitesPerPixel / bitsPerComponent;
+    UInt8 * buffer = [self dataFromImage:self.heightMap];
+    for (int row = 0;row < self.terrainSize.height; ++row) {
+        GLGeometry * terrainMeshStrip = [[GLGeometry alloc] initWithGeometryType:GLGeometryTypeTriangleStrip];
+        for (int col = 0;col <= self.terrainSize.width; ++col) {
+            GLKVector3 position1 = [self vertexPosition:col row:row buffer:buffer bytesPerRow:bytesPerRow bytesPerPixel:bytesPerPixel];
+            GLKVector3 normal1 = [self vertexNormal:position1 col:col row:row buffer:buffer bytesPerRow:bytesPerRow bytesPerPixel:bytesPerPixel];
+            GLVertex vertex1 = GLVertexMake(position1.x, position1.y, position1.z, normal1.x, normal1.y, normal1.z, col / (GLfloat)self.terrainSize.width * 2, row / (GLfloat)self.terrainSize.height * 2);
+            [terrainMeshStrip appendVertex:vertex1];
+            
+            GLKVector3 position2 = [self vertexPosition:col row:row + 1 buffer:buffer bytesPerRow:bytesPerRow bytesPerPixel:bytesPerPixel];
+            GLKVector3 normal2 = [self vertexNormal:position2 col:col row:row + 1 buffer:buffer bytesPerRow:bytesPerRow bytesPerPixel:bytesPerPixel];
+            GLVertex vertex2 = GLVertexMake(position2.x, position2.y, position2.z, normal2.x, normal2.y, normal2.z, col / (GLfloat)self.terrainSize.width * 2, (row + 1) / (GLfloat)self.terrainSize.height * 2) ;
+            [terrainMeshStrip appendVertex:vertex2];
+        }
+        [self.terrainMeshStrips addObject:terrainMeshStrip];
+    }
+    free(buffer);
+}
+```
+每一行构建一个三角带几何体，计算UV的时候可以乘以一个缩放系数，控制地形贴图的重复次数。通过乘以2` col / (GLfloat)self.terrainSize.width * 2`，UV的范围就变成了0~2。为了使贴图可以重复，还需要添加下面的代码。
+```
+    GLKTextureInfo *grass = [GLKTextureLoader textureWithCGImage:[UIImage imageNamed:@"grass_01.jpg"].CGImage options:nil error:nil];
+    NSError *error;
+    GLKTextureInfo *dirt = [GLKTextureLoader textureWithCGImage:[UIImage imageNamed:@"dirt_01.jpg"].CGImage options:nil error:&error];
+    glEnable(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, grass.name);
+    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glBindTexture(GL_TEXTURE_2D, dirt.name);
+    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+```
+在`GLKTextureInfo`创建后，使用` glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);`配置它们支持重复贴图。
+
+### 多重贴图
+为了使地形看起来更加自然，我添加了草和泥土两种贴图，并为地形编写了新的fragment shader。
+```
+precision highp float;
+
+varying vec3 fragPosition;
+varying vec3 fragNormal;
+varying vec2 fragUV;
+
+uniform float elapsedTime;
+uniform vec3 lightDirection;
+uniform mat4 normalMatrix;
+uniform sampler2D grassMap;
+uniform sampler2D dirtMap;
+
+void main(void) {
+    vec3 normalizedLightDirection = normalize(-lightDirection);
+    vec3 transformedNormal = normalize((normalMatrix * vec4(fragNormal, 1.0)).xyz);
+    
+    float diffuseStrength = dot(normalizedLightDirection, transformedNormal);
+    diffuseStrength = clamp(diffuseStrength, 0.0, 1.0);
+    vec3 diffuse = vec3(diffuseStrength);
+    
+    vec3 ambient = vec3(0.3);
+    
+    vec4 finalLightStrength = vec4(ambient + diffuse, 1.0);
+    
+    
+    vec4 grassColor = texture2D(grassMap, fragUV);
+    vec4 dirtColor = texture2D(dirtMap, fragUV);
+    vec4 materialColor = vec4(0.0);
+    if (fragPosition.y <= 30.0) {
+        materialColor = dirtColor;
+    } else if (fragPosition.y > 30.0 && fragPosition.y < 60.0) {
+        float dirtFactor = (60.0 - fragPosition.y) / 30.0;
+        materialColor = dirtColor * dirtFactor + grassColor * (1.0 - dirtFactor);
+    } else {
+        materialColor = grassColor;
+    }
+    gl_FragColor = vec4(materialColor.rgb * finalLightStrength.rgb, 1.0);
+}
+```
+增加了两个纹理`uniform sampler2D grassMap; uniform sampler2D dirtMap;`，y坐标小于30使用泥土的贴图，30到60使用泥土和草混合，高于60使用草贴图。地形在绘制时同时绑定这两种贴图。
+```
+- (void)draw:(GLContext *)glContext {
+    glEnable(GL_CULL_FACE);
+    glCullFace(GL_BACK);
+    glFrontFace(GL_CCW);
+    [glContext setUniformMatrix4fv:@"modelMatrix" value:self.modelMatrix];
+    bool canInvert;
+    GLKMatrix4 normalMatrix = GLKMatrix4InvertAndTranspose(self.modelMatrix, &canInvert);
+    [glContext setUniformMatrix4fv:@"normalMatrix" value:canInvert ? normalMatrix : GLKMatrix4Identity];
+    [glContext bindTexture:self.grassTexture to:GL_TEXTURE0 uniformName:@"grassMap"];
+    [glContext bindTexture:self.dirtTexture to:GL_TEXTURE1 uniformName:@"dirtMap"];
+    for (GLGeometry * geometry in self.terrainMeshStrips) {
+        [glContext drawGeometry:geometry];
+    }
+}
+```
+因为地形需要使用不一样的Fragment Shader，所以在`ViewController`中为`Terrain`生成新的`GLContext`。
+```
+- (void)createTerrain {
+    NSString *vertexShaderPath = [[NSBundle mainBundle] pathForResource:@"vertex" ofType:@".glsl"];
+    NSString *fragmentShaderPath = [[NSBundle mainBundle] pathForResource:@"frag_terrain" ofType:@".glsl"];
+    GLContext *terrainContext = [GLContext contextWithVertexShaderPath:vertexShaderPath fragmentShaderPath:fragmentShaderPath];
+    GLKTextureInfo *grass = [GLKTextureLoader textureWithCGImage:[UIImage imageNamed:@"grass_01.jpg"].CGImage options:nil error:nil];
+    NSError *error;
+    GLKTextureInfo *dirt = [GLKTextureLoader textureWithCGImage:[UIImage imageNamed:@"dirt_01.jpg"].CGImage options:nil error:&error];
+    glEnable(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, grass.name);
+    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glBindTexture(GL_TEXTURE_2D, dirt.name);
+    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+
+    
+    UIImage *heightMap = [UIImage imageNamed:@"terrain_01.jpg"];
+    Terrain *terrain = [[Terrain alloc] initWithGLContext:terrainContext heightMap:heightMap size:CGSizeMake(500, 500) height:100 grass:grass dirt:dirt];
+    terrain.modelMatrix = GLKMatrix4MakeTranslation(-250, 0, -250);
+    [self.objects addObject:terrain];
+}
+```
+到此，绘制地形就介绍完了。如果读者有兴趣，可以去网上下载更多的灰度地形图来尝试，使用简单的材料生成复杂的地形模型算是绘制地形最有魅力的一面了吧。

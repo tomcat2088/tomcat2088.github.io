@@ -1,0 +1,171 @@
+---
+layout: post
+title: VBO&VAO
+date: 2017-07-03 19:42:04 +0800
+categories: 学习OpenGLES系列文章
+---
+
+### [获取示例代码](https://github.com/SquarePants1991/OpenGLESLearn)，本文代码在分支chapter13中。
+***
+
+本文将要介绍OpenGL ES的一个优化技巧，使用VBO和VAO减少CPU和GPU之间的数据传递，提高绘制速度。我们先来回顾一下之前绘制图形用到的代码。
+```
+// 启用Shader中的两个属性
+// attribute vec4 position;
+// attribute vec4 color;
+GLuint positionAttribLocation = glGetAttribLocation(program, "position");
+glEnableVertexAttribArray(positionAttribLocation);
+GLuint colorAttribLocation = glGetAttribLocation(program, "normal");
+glEnableVertexAttribArray(colorAttribLocation);
+GLuint uvAttribLocation = glGetAttribLocation(program, "uv");
+glEnableVertexAttribArray(uvAttribLocation);
+
+// 为shader中的position和color赋值
+// glVertexAttribPointer (GLuint indx, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const GLvoid* ptr)
+// indx: 上面Get到的Location
+// size: 有几个类型为type的数据，比如位置有x,y,z三个GLfloat元素，值就为3
+// type: 一般就是数组里元素数据的类型
+// normalized: 暂时用不上
+// stride: 每一个点包含几个byte，本例中就是6个GLfloat，x,y,z,r,g,b
+// ptr: 数据开始的指针，位置就是从头开始，颜色则跳过3个GLFloat的大小
+glVertexAttribPointer(positionAttribLocation, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), (char *)triangleData);
+glVertexAttribPointer(colorAttribLocation, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), (char *)triangleData + 3 * sizeof(GLfloat));
+glVertexAttribPointer(uvAttribLocation, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), (char *)triangleData + 6 * sizeof(GLfloat));
+```
+```
+glDrawArrays(GL_TRIANGLES, 0, vertexCount);
+```
+首先激活Vertex Shader中的属性，然后绑定数据到属性上，最后使用`glDrawArrays`绘制图形。在这个过程中，`triangleData`会从系统内存传递到GPU的内存，也就是说每次渲染都会传递一次，如果数据量过多，可能会导致数据传递时间过长，严重影响帧率。
+> 帧率是指每秒绘制的次数，每次绘制消耗的时间越多，帧率也就越低。为了让动画看起来很平滑，帧率越高越好。不过因为屏幕的刷新频率一般都是60Hz，为了保持垂直同步，画面不容易撕裂，会限制帧率小于等于屏幕刷新频率。
+
+#### VBO
+如果我们可以把数据提前传递到GPU，CPU每次绘制的时候只需要告诉GPU自己引用了显存里面的哪一块数据就可以减少数据的传递了。这就是VBO做的事情，VBO全称Vertex Buffer Object，它就是把系统内存中的顶点数据传递给GPU后返回的引用凭证。创建的代码如下。
+```
+- (GLfloat *)cubeData {
+    static GLfloat cubeData[] = {
+        // X轴0.5处的平面
+        0.5,  -0.5,    0.5f, 1,  0,  0, 0, 0,
+        0.5,  -0.5f,  -0.5f, 1,  0,  0, 0, 1,
+        0.5,  0.5f,   -0.5f, 1,  0,  0, 1, 1,
+        0.5,  0.5,    -0.5f, 1,  0,  0, 1, 1,
+        0.5,  0.5f,    0.5f, 1,  0,  0, 1, 0,
+        0.5,  -0.5f,   0.5f, 1,  0,  0, 0, 0,
+        // X轴-0.5处的平面
+        -0.5,  -0.5,    0.5f, -1,  0,  0, 0, 0,
+        -0.5,  -0.5f,  -0.5f, -1,  0,  0, 0, 1,
+        -0.5,  0.5f,   -0.5f, -1,  0,  0, 1, 1,
+        -0.5,  0.5,    -0.5f, -1,  0,  0, 1, 1,
+        -0.5,  0.5f,    0.5f, -1,  0,  0, 1, 0,
+        -0.5,  -0.5f,   0.5f, -1,  0,  0, 0, 0,
+        
+        -0.5,  0.5,  0.5f, 0,  1,  0, 0, 0,
+        -0.5f, 0.5, -0.5f, 0,  1,  0, 0, 1,
+        0.5f, 0.5,  -0.5f, 0,  1,  0, 1, 1,
+        0.5,  0.5,  -0.5f, 0,  1,  0, 1, 1,
+        0.5f, 0.5,   0.5f, 0,  1,  0, 1, 0,
+        -0.5f, 0.5,  0.5f, 0,  1,  0, 0, 0,
+        -0.5, -0.5,   0.5f, 0,  -1,  0, 0, 0,
+        -0.5f, -0.5, -0.5f, 0,  -1,  0, 0, 1,
+        0.5f, -0.5,  -0.5f, 0,  -1,  0, 1, 1,
+        0.5,  -0.5,  -0.5f, 0,  -1,  0, 1, 1,
+        0.5f, -0.5,   0.5f, 0,  -1,  0, 1, 0,
+        -0.5f, -0.5,  0.5f, 0,  -1,  0, 0, 0,
+        
+        -0.5,   0.5f,  0.5,   0,  0,  1, 0, 0,
+        -0.5f,  -0.5f,  0.5,  0,  0,  1, 0, 1,
+        0.5f,   -0.5f,  0.5,  0,  0,  1, 1, 1,
+        0.5,    -0.5f, 0.5,   0,  0,  1, 1, 1,
+        0.5f,  0.5f,  0.5,    0,  0,  1, 1, 0,
+        -0.5f,   0.5f,  0.5,  0,  0,  1, 0, 0,
+        -0.5,   0.5f,  -0.5,   0,  0,  -1, 0, 0,
+        -0.5f,  -0.5f,  -0.5,  0,  0,  -1, 0, 1,
+        0.5f,   -0.5f,  -0.5,  0,  0,  -1, 1, 1,
+        0.5,    -0.5f, -0.5,   0,  0,  -1, 1, 1,
+        0.5f,  0.5f,  -0.5,    0,  0,  -1, 1, 0,
+        -0.5f,   0.5f,  -0.5,  0,  0,  -1, 0, 0,
+    };
+    return cubeData;
+}
+```
+```
+glGenBuffers(1, &vbo);
+glBindBuffer(GL_ARRAY_BUFFER, vbo);
+glBufferData(GL_ARRAY_BUFFER, 36 * 8 * sizeof(GLfloat), [self cubeData], GL_STATIC_DRAW);
+```
+首先使用`glGenBuffers`生成Buffer，然后绑定缓存到`GL_ARRAY_BUFFER`,然后向`GL_ARRAY_BUFFER`中写数据。这样vbo所对应的GPU显存中就有`cubeData`的数据了。`glBufferData`最后一个参数`GL_STATIC_DRAW`表示这块数据不会改变。如果你想在后面改变vbo对应的数据的话，可以改为`GL_DYNAMIC_DRAW `或者`GL_STREAM_DRAW `，前者适合低频的修改，后者适合高频修改。
+> 只要再次调用`glBindBuffer`和`glBufferData`就可以修改vbo对应的数据了。
+
+有了VBO之后，绘制代码可以修改成。
+```
+glBindBuffer(GL_ARRAY_BUFFER, vbo);
+
+// 启用Shader中的两个属性
+// attribute vec4 position;
+// attribute vec4 color;
+GLuint positionAttribLocation = glGetAttribLocation(program, "position");
+glEnableVertexAttribArray(positionAttribLocation);
+GLuint colorAttribLocation = glGetAttribLocation(program, "normal");
+glEnableVertexAttribArray(colorAttribLocation);
+GLuint uvAttribLocation = glGetAttribLocation(program, "uv");
+glEnableVertexAttribArray(uvAttribLocation);
+
+// 为shader中的position和color赋值
+// glVertexAttribPointer (GLuint indx, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const GLvoid* ptr)
+// indx: 上面Get到的Location
+// size: 有几个类型为type的数据，比如位置有x,y,z三个GLfloat元素，值就为3
+// type: 一般就是数组里元素数据的类型
+// normalized: 暂时用不上
+// stride: 每一个点包含几个byte，本例中就是6个GLfloat，x,y,z,r,g,b
+// ptr: 数据开始的指针，位置就是从头开始，颜色则跳过3个GLFloat的大小
+glVertexAttribPointer(positionAttribLocation, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), (char *)NULL);
+glVertexAttribPointer(colorAttribLocation, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), (char *)NULL + 3 * sizeof(GLfloat));
+glVertexAttribPointer(uvAttribLocation, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), (char *)NULL + 6 * sizeof(GLfloat));
+```
+首先要绑定你的VBO`glBindBuffer(GL_ARRAY_BUFFER, vbo);`，这样在绑定属性数据时就不再需要传递顶点数据`triangleData`了，直接改为`NULL`即可。现在数据传递已经被优化了，那么绑定属性数据这个步骤是不是也可以被优化呢？当然可以，这就是VAO做的事情。
+
+#### VAO
+VAO全称Vertex Array Object，无格式的顶点数据VBO转化为固定顶点格式的数组VAO，就可以被Vertex Shader直接使用了。创建过程如下。
+```
+glGenVertexArraysOES(1, &vao);
+glBindVertexArrayOES(vao);
+
+glBindBuffer(GL_ARRAY_BUFFER, vbo);
+[self.context bindAttribs:NULL];
+
+glBindVertexArrayOES(0);
+```
+`bindAttribs`实现如下。
+```
+- (void)bindAttribs:(GLfloat *)triangleData {
+    // 启用Shader中的两个属性
+    // attribute vec4 position;
+    // attribute vec4 color;
+    GLuint positionAttribLocation = glGetAttribLocation(program, "position");
+    glEnableVertexAttribArray(positionAttribLocation);
+    GLuint colorAttribLocation = glGetAttribLocation(program, "normal");
+    glEnableVertexAttribArray(colorAttribLocation);
+    GLuint uvAttribLocation = glGetAttribLocation(program, "uv");
+    glEnableVertexAttribArray(uvAttribLocation);
+    
+    // 为shader中的position和color赋值
+    // glVertexAttribPointer (GLuint indx, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const GLvoid* ptr)
+    // indx: 上面Get到的Location
+    // size: 有几个类型为type的数据，比如位置有x,y,z三个GLfloat元素，值就为3
+    // type: 一般就是数组里元素数据的类型
+    // normalized: 暂时用不上
+    // stride: 每一个点包含几个byte，本例中就是6个GLfloat，x,y,z,r,g,b
+    // ptr: 数据开始的指针，位置就是从头开始，颜色则跳过3个GLFloat的大小
+    glVertexAttribPointer(positionAttribLocation, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), (char *)triangleData);
+    glVertexAttribPointer(colorAttribLocation, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), (char *)triangleData + 3 * sizeof(GLfloat));
+    glVertexAttribPointer(uvAttribLocation, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), (char *)triangleData + 6 * sizeof(GLfloat));
+}
+```
+`glGenVertexArraysOES`等OES结尾的方法都是苹果自己扩展的，在其他平台上也会有VAO相关的方法集合，但名字会有所不同。VAO的创建过程是生成VAO Buffer，绑定VAO Buffer，执行属性绑定的操作，最后解绑VAO Buffer。这样VBO就转化成了VAO。绘制的代码变成如下。
+```
+glBindVertexArrayOES(vao);
+glDrawArrays(GL_TRIANGLES, 0, vertexCount);
+```
+这样一来，顶点数据经过VBO和VAO的优化，就不需要每次绘制前进行数据传递和属性绑定了，大大提高了绘制速度。
+
+### 重构
+本文的例子做了一些重构，创建了可渲染物体的基类`GLObject`，方便重用。`Cube`类继承`GLObject`，使用VAO绘制带有纹理的正方体。`GLContext`中增加了使用VBO和VAO绘制三角形的方法。对重构部分有兴趣的可以自行阅读源码。

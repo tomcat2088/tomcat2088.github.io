@@ -1,0 +1,328 @@
+---
+layout: post
+title: 高级光照
+date: 2017-07-03 19:42:28 +0800
+categories: 学习OpenGLES系列文章
+---
+
+### [获取示例代码](https://github.com/SquarePants1991/OpenGLESLearn)，本文代码在分支chapter18中。
+***
+
+在[基本光照](http://www.jianshu.com/p/9f41a7272c22)中为大家介绍了环境光和漫反射光构成的基本光照模型。本文将为大家介绍Blinn-Phong光照模型，通过环境光，漫反射光和高光渲染出更加真实的物体。
+
+![](http://upload-images.jianshu.io/upload_images/2949750-0e8636e5b324ffbf.jpg?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+
+Blinn-Phong光照模型分为三个部分，环境光，漫反射光，高光（也可以理解为镜面反射光），将这三种光和物体本来的颜色融合，就可以计算出最终的颜色了。下面我们先来介绍这三种光的物理含义。
+
+### 环境光
+真实世界里，就算在晚上，物体也不一定会处于完全黑暗状态，总会有一些微弱的光源照亮物体，比如月光，被灯光照亮的天空等等，为了模拟这种情况，我们使用环境光这一概念来表达周围环境提供的微弱光亮。对于环境光我们可以使用环境光颜色`ambientColor`和强度`ambientIndensity`来表示。`ambientColor`乘以`ambientIndensity`就是环境光产生的颜色。
+> 如果你处于大森林中又恰巧乌云蔽月，应该就不用计算环境光了。
+
+### 漫反射光
+表面粗糙的物体会将光反射到各个方向，无论我们从哪个方向观察它，都会看到一样的光照效果。我们把这些光称为漫反射光。
+白光是由各种不同颜色（波长）的光组成的。如果我们看到物体是红色，就表明这个物体把除了红光外的其他光都吸收了。我们可以用向量乘法轻松的来表达这一物理现象。
+```
+物体颜色 = (1.0, 0.0, 0.0) // r,g,b
+白光 = (1.0, 1.0, 1.0) // r,g,b
+白光照射物体后 = (1.0, 1.0, 1.0) * (1.0, 0.0, 0.0)  = (1.0 * 1.0, 1.0 * 0.0, 1.0 * 0.0) = (1.0, 0.0, 0.0)
+```
+有了这个公式，我们可以随意调整物体的颜色和光的颜色，然后通过它计算出最终色。除了颜色我们还需要计算接受到的光照强度，这个在[基本光照](http://www.jianshu.com/p/9f41a7272c22)中已有提及。我们通过光线和法线的夹角来计算接受到的光照强度。强度乘以上面计算出的最终色就是漫反射光产生的颜色。
+![](http://upload-images.jianshu.io/upload_images/2949750-167bdc4739e71821.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+
+### 高光
+表面光滑的物体，比如汽车的烤漆，光滑的金属，会对光进行镜面反射，如果你的眼睛刚好在光线的反射光附近，那么你将看到强烈的光照。传统的Phong光照模型就是先计算光线相对于当前法线的反射光，然后将视线向量和反射光向量点乘来计算观察到的反射光强度。但是这种算法在视线和反射光夹角大于90度时效果不佳，所以本文采用Blinn-Phong模型来计算反射光强度。
+![](http://upload-images.jianshu.io/upload_images/2949750-3b549668a815a01a.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+我们先求解出视线向量和光线向量的半向量H，就是将视线向量和光线向量规范化后相加再规范化。然后将H和法向量N点乘来计算高光强度`specularStrength`。计算出强度后，我们会使用一个参数`smoothness`再次处理强度，`specularStrength = pow(specularStrength, smoothness)`，`smoothness`越大，高光就会使平面显得越光滑。
+![](http://upload-images.jianshu.io/upload_images/2949750-abc08ca75ca82566.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+
+> 红色是`pow(cos, 100)`曲线，绿色是`cos`曲线。
+
+通过上图我们可以看出来，对`cos`进行幂运算，指数越大，曲线边缘下降越快，而且越窄。我们看到的光滑表面一般都具有较窄和快速衰减的高光，所以`smoothness`取较大值时，可以模拟光滑的表面。
+
+### Fragment Shader
+了解完原理后，接下来我们来看看新的Fragment Shader。
+```
+precision highp float;
+
+// 平行光
+struct Directionlight {
+    vec3 direction;
+    vec3 color;
+    float indensity;
+    float ambientIndensity;
+};
+
+struct Material {
+    vec3 diffuseColor;
+    vec3 ambientColor;
+    vec3 specularColor;
+    float smoothness; // 0 ~ 1000 越高显得越光滑
+};
+
+varying vec3 fragNormal;
+varying vec2 fragUV;
+varying vec3 fragPosition;
+
+uniform float elapsedTime;
+uniform Directionlight light;
+uniform Material material;
+uniform vec3 eyePosition;
+uniform mat4 normalMatrix;
+uniform mat4 modelMatrix;
+
+uniform sampler2D diffuseMap;
+
+void main(void) {
+    vec3 normalizedLightDirection = normalize(-light.direction);
+    vec3 transformedNormal = normalize((normalMatrix * vec4(fragNormal, 1.0)).xyz);
+    
+    // 计算漫反射
+    float diffuseStrength = dot(normalizedLightDirection, transformedNormal);
+    diffuseStrength = clamp(diffuseStrength, 0.0, 1.0);
+    vec3 diffuse = diffuseStrength * light.color * material.diffuseColor * light.indensity;
+    
+    // 计算环境光
+    vec3 ambient = vec3(light.ambientIndensity) * material.ambientColor;
+    
+    // 计算高光
+    vec4 eyeVertexPosition = modelMatrix * vec4(fragPosition, 1.0);
+    vec3 eyeVector = normalize(eyePosition - eyeVertexPosition.xyz);
+    vec3 halfVector = normalize(normalizedLightDirection + eyeVector);
+    float specularStrength = dot(halfVector, transformedNormal);
+    specularStrength = pow(specularStrength, material.smoothness);
+    vec3 specular = specularStrength * material.specularColor * light.color * light.indensity;
+    
+    // 最终颜色计算
+    vec3 finalColor = diffuse + ambient + specular;
+    
+    gl_FragColor = vec4(finalColor, 1.0);
+}
+```
+首先我们定义了两个结构体`struct Directionlight`和`struct Material`，来描述平行光照和物体材质。下面是他们中成员变量的定义。
+
+##### Directionlight
+* `vec3 direction;`描述光照方向，和之前的`lightDirection`含义一致。
+* `vec3 color;`光的颜色
+* `float indensity;`光照强度，推荐值0~1，大于1的值可能会使物体大面积曝光过度。
+* `float ambientIndensity;`环境光强度，可以放到结构体外，不是每个灯光必须的参数。
+
+##### Material
+* `vec3 diffuseColor;`物体的颜色，可以使用diffuse贴图来代替diffuseColor。
+* `vec3 ambientColor;`环境光颜色，可以放到结构体外，如果你想所有的物体共享相同的环境光颜色的话。
+* `vec3 specularColor;`高光颜色，我们可以为高光指定颜色，或者让高光的颜色和灯光颜色相同。
+* `float smoothness;`平滑度，从0到1000。
+
+然后我们用这两个结构定义灯光和材质的`uniform`。
+```
+uniform Directionlight light;
+uniform Material material;
+```
+
+接下来分别计算三种光照颜色。
+
+##### 漫反射
+```
+// 计算漫反射
+float diffuseStrength = dot(normalizedLightDirection, transformedNormal);
+diffuseStrength = clamp(diffuseStrength, 0.0, 1.0);
+vec3 diffuse = diffuseStrength * light.color * material.diffuseColor * light.indensity;
+```
+`normalizedLightDirection`是反向并规范后的光照向量，`transformedNormal`是变换后的法线，利用他们的点乘计算出强度`diffuseStrength`，再将光照颜色，材质颜色，漫反射强度和光照强度相乘就得出了最终漫反射的颜色`diffuse`。
+
+##### 环境光
+```
+vec3 ambient = vec3(light.ambientIndensity) * material.ambientColor;
+```
+环境光强度乘以环境光颜色即是最终的环境光颜色`ambient`。
+
+##### 高光
+```
+// 计算高光
+vec4 worldVertexPosition = modelMatrix * vec4(fragPosition, 1.0);
+vec3 eyeVector = normalize(eyePosition - worldVertexPosition.xyz);
+vec3 halfVector = normalize(normalizedLightDirection + eyeVector);
+float specularStrength = dot(halfVector, transformedNormal);
+specularStrength = pow(specularStrength, material.smoothness);
+vec3 specular = specularStrength * material.specularColor * light.color * light.indensity;
+```
+先计算出顶点在世界坐标的位置`worldVertexPosition`，然后求出视线的向量`eyeVector`，通过视线向量和光线向量求解出半向量`halfVector`。接着使用半向量`halfVector`和法向量`transformedNormal`进行点乘计算出高光强度`specularStrength`，最后把高光强度`specularStrength`进行幂运算，调整高光效果。将高光强度，高光颜色，光照颜色，光照强度相乘，计算出高光颜色`specular`。
+
+> 在最后一步中，如果你希望你的高光颜色只受`material.specularColor`控制，可以把` light.color`从公式中移除。这取决于你想要的效果。
+
+最终，我们通过简单的相加计算出最终颜色。
+```
+// 最终颜色计算
+vec3 finalColor = diffuse + ambient + specular;
+ 
+gl_FragColor = vec4(finalColor, 1.0);
+```
+
+### OC代码
+在OC代码中，我们在`ViewController`里增加了表示光照和材质的结构体，以及变量。
+```
+typedef struct  {
+    GLKVector3 direction;
+    GLKVector3 color;
+    GLfloat indensity;
+    GLfloat ambientIndensity;
+} Directionlight;
+
+typedef struct {
+    GLKVector3 diffuseColor;
+    GLKVector3 ambientColor;
+    GLKVector3 specularColor;
+    GLfloat smoothness; // 0 ~ 1000 越高显得越光滑
+} Material;
+```
+```
+@property (assign, nonatomic) Directionlight light;
+@property (assign, nonatomic) Material material;
+```
+在`viewDidLoad`中进行了初始化。
+```
+Directionlight defaultLight;
+defaultLight.color = GLKVector3Make(1, 1, 1); // 白色的灯
+defaultLight.direction = GLKVector3Make(1, -1, 0);
+defaultLight.indensity = 1.0;
+defaultLight.ambientIndensity = 0.1;
+self.light = defaultLight;
+    
+Material material;
+material.ambientColor = GLKVector3Make(1, 1, 1);
+material.diffuseColor = GLKVector3Make(0.1, 0.1, 0.1);
+material.specularColor = GLKVector3Make(1, 1, 1);
+material.smoothness = 300;
+self.material = material;
+```
+你可以任意调整颜色来修改渲染结果，或者运行程序，使用内置的UI调整各个变量的值。我增加了一些Slider来调整这些参数。
+```
+#pragma mark - Arguments Adjust
+
+- (IBAction)smoothnessAdjust:(UISlider *)sender {
+    Material _material = self.material;
+    _material.smoothness = sender.value;
+    self.material = _material;
+}
+
+- (IBAction)indensityAdjust:(UISlider *)sender {
+    Directionlight _light = self.light;
+    _light.indensity = sender.value;
+    self.light = _light;
+    
+}
+
+- (IBAction)lightColorAdjust:(UISlider *)sender {
+    GLKVector3 yuv = GLKVector3Make(1.0, (cos(sender.value) + 1.0) / 2.0, (sin(sender.value) + 1.0) / 2.0);
+    Directionlight _light = self.light;
+    _light.color = [self colorFromYUV:yuv];
+    if (sender.value == sender.maximumValue) {
+        _light.color = GLKVector3Make(1, 1, 1);
+    }
+    self.light = _light;
+        sender.backgroundColor = [UIColor colorWithRed:_light.color.r green:_light.color.g blue:_light.color.b alpha:1.0];
+}
+
+- (IBAction)ambientColorAdjust:(UISlider *)sender {
+    GLKVector3 yuv = GLKVector3Make(1.0, (cos(sender.value) + 1.0) / 2.0, (sin(sender.value) + 1.0) / 2.0);
+    Material _material = self.material;
+    _material.ambientColor = [self colorFromYUV:yuv];
+    if (sender.value == sender.maximumValue) {
+        _material.ambientColor = GLKVector3Make(1, 1, 1);
+    }
+    self.material = _material;
+    sender.backgroundColor = [UIColor colorWithRed:_material.ambientColor.r green:_material.ambientColor.g blue:_material.ambientColor.b alpha:1.0];
+}
+
+- (IBAction)diffuseColorAdjust:(UISlider *)sender {
+    GLKVector3 yuv = GLKVector3Make(1.0, (cos(sender.value) + 1.0) / 2.0, (sin(sender.value) + 1.0) / 2.0);
+    Material _material = self.material;
+    _material.diffuseColor = [self colorFromYUV:yuv];
+    if (sender.value == sender.maximumValue) {
+        _material.diffuseColor = GLKVector3Make(1, 1, 1);
+    }
+    if (sender.value == sender.minimumValue) {
+        _material.diffuseColor = GLKVector3Make(0.1, 0.1, 0.1);
+    }
+    self.material = _material;
+    sender.backgroundColor = [UIColor colorWithRed:_material.diffuseColor.r green:_material.diffuseColor.g blue:_material.diffuseColor.b alpha:1.0];
+}
+
+- (IBAction)specularColorAdjust:(UISlider *)sender {
+    GLKVector3 yuv = GLKVector3Make(1.0, (cos(sender.value) + 1.0) / 2.0, (sin(sender.value) + 1.0) / 2.0);
+    Material _material = self.material;
+    _material.specularColor = [self colorFromYUV:yuv];
+    if (sender.value == sender.maximumValue) {
+        _material.specularColor = GLKVector3Make(1, 1, 1);
+    }
+    self.material = _material;
+    sender.backgroundColor = [UIColor colorWithRed:_material.specularColor.r green:_material.specularColor.g blue:_material.specularColor.b alpha:1.0];
+}
+
+
+- (GLKVector3)colorFromYUV:(GLKVector3)yuv {
+    float Cb, Cr, Y;
+    float R ,G, B;
+    Y = yuv.x * 255.0;
+    Cb = yuv.y * 255.0 - 128.0;
+    Cr = yuv.z * 255.0 - 128.0;
+    
+    R = 1.402 * Cr + Y;
+    G = -0.344 * Cb - 0.714 * Cr + Y;
+    B = 1.772 * Cb + Y;
+    
+    return GLKVector3Make(MIN(1.0, R / 255.0), MIN(1.0, G / 255.0), MIN(1.0, B / 255.0));
+}
+```
+在渲染代码中，将灯光和材质传递给Shader。
+```
+- (void)glkView:(GLKView *)view drawInRect:(CGRect)rect {
+    [super glkView:view drawInRect:rect];
+    
+    [self.objects enumerateObjectsUsingBlock:^(GLObject *obj, NSUInteger idx, BOOL *stop) {
+        [obj.context active];
+        [obj.context setUniform1f:@"elapsedTime" value:(GLfloat)self.elapsedTime];
+        [obj.context setUniformMatrix4fv:@"projectionMatrix" value:self.projectionMatrix];
+        [obj.context setUniformMatrix4fv:@"cameraMatrix" value:self.cameraMatrix];
+        [obj.context setUniform3fv:@"eyePosition" value:self.eyePosition];
+        [obj.context setUniform3fv:@"light.direction" value:self.light.direction];
+        [obj.context setUniform3fv:@"light.color" value:self.light.color];
+        [obj.context setUniform1f:@"light.indensity" value:self.light.indensity];
+        [obj.context setUniform1f:@"light.ambientIndensity" value:self.light.ambientIndensity];
+        [obj.context setUniform3fv:@"material.diffuseColor" value:self.material.diffuseColor];
+        [obj.context setUniform3fv:@"material.ambientColor" value:self.material.ambientColor];
+        [obj.context setUniform3fv:@"material.specularColor" value:self.material.specularColor];
+        [obj.context setUniform1f:@"material.smoothness" value:self.material.smoothness];
+        
+        
+        [obj draw:obj.context];
+    }];
+}
+```
+注意传递`struct`给Shader的写法，我们需要为struct中每一个成员单独传递值。除了灯光和材质外，我还传递了`eyePosition`给Shader，这是摄像机的位置，用来计算视线向量。
+
+到此，一个Blinn-Phong光照模型就构建完了。现在我们可以将上篇文章中未介绍的mtl文件在此做一个说明了。mtl文件保存了物体材质的信息，基本的结构如下。
+```
+newmtl mtlName
+Ns 94.117647
+Ka 1.000000 1.000000 1.000000
+Kd 0.640000 0.640000 0.640000
+Ks 0.500000 0.500000 0.500000
+d 1.0
+illum 2
+map_Kd XXX
+map_Ks XXX
+map_Ka XXX
+map_Bump XXX
+map_d XXX
+```
+* `newmtl xxx`表示材质的名称，在obj文件中可以通过名称来引用材质。
+* `Ns 94.117647` 高光调整参数，类似于我们的`smoothness`
+* `Ka 1.000000 1.000000 1.000000` 环境光颜色
+* `Kd 0.640000 0.640000 0.640000` 漫反射颜色
+* `Ks 0.500000 0.500000 0.500000` 高光颜色
+* `d 1.0` 溶解度，为0时完全透明，1完全不透明。
+* `illum 2` 光照模式，0 禁止光照, 1 只有环境光和漫反射光，2 所有光照启用。
+* `map_XX` map开头的都是各种颜色的贴图，如果有值，就是使用贴图来代替纯色，`map_Bump`表示法线贴图，在后面会有文章详细介绍。
+了解到他们的含义后，我们就可以很轻易的将他们运用到Blinn-Phong光照模型中了。
+
+本文主要介绍了平行光的Blinn-Phong光照模型。如果是点光源呢？其实只要通过点光源的位置和顶点位置计算出光线向量，剩下的计算都是一样的。我将在分支`chapter18-point`实现点光源的效果，如果你有兴趣，可以前去clone查看。

@@ -1,0 +1,193 @@
+---
+layout: post
+title: iOS特效之仿Mac窗口最小化的神奇效果
+date: 2017-08-30 15:08:48 +0800
+categories: iOS开发
+---
+### [点击获取示例代码](https://github.com/SquarePants1991/MagicalTransition){:target="_blank"}
+
+
+### 前言
+这次仿照Mac窗口最小化时的神奇效果（官方的中文版本是这么叫的，听起来很尴尬），做了一个iOS版本的。基础代码都沿用自[iOS特效之破碎的ViewController](http://www.gltech.win/ios%E5%BC%80%E5%8F%91/2017/08/23/iOS%E7%89%B9%E6%95%88%E4%B9%8B%E7%A0%B4%E7%A2%8E%E7%9A%84ViewController.html){:target="_blank"}。先来看一下效果图。
+![](http://upload-images.jianshu.io/upload_images/2949750-d1cbe401ab908395.jpg?imageMogr2/auto-orient/strip)
+
+### 原理
+首先要分析一下官方的动画是如何进行的，下面是效果的截图。动画分为两步，先是将图片扭曲成下面的样子，然后再吸入到左侧。想要做图片扭曲，用一个nxm的3D网格就可以了。n和m越大，扭曲后得到的边缘越平滑。
+![](http://upload-images.jianshu.io/upload_images/2949750-99edd09126aa5ea6.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+在上图的基础上加入一个坐标轴，这样便于观察规律。
+
+![](http://upload-images.jianshu.io/upload_images/2949750-341dd164c5ae9927.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+
+在动画执行过程中，网格上的点会沿着一个方向缩放，我们称缩放的轴为缩放轴，图中的缩放轴是y轴。同时还需要在缩放轴上指定一个缩放中心点。在动画的第二个阶段，所有点会沿着一个方向移动，我们称这个轴为移动轴，图中的移动轴是x轴。
+
+#### 动画第一阶段
+在动画的第一个阶段中，网格上的点只在缩放轴上移动。我们假设一个点在移动轴上的位置为`movLoc`,那么我们可以使用公式`0.5 * 0.98 * cos(3.14 * movLoc + 3.14) + 0.5 + 0.01;`计算出第一阶段结束时，该点需要向缩放中心点缩放的量。为什么是这个公式呢，我给大家贴一张图就清楚了。是不是和上面的边缘曲线有点像。图我是用Mac自带的Grapher绘制的。在调试曲线的过程中Grapher的确非常好用。公式里的0.98和0.01是相关的两个量，控制左边窄口的大小。0.01 = (1 - 0.98) / 2。动画第一阶段主要的工作就是根据当前动画的进度百分比，控制点到达最终缩放量的进度即可。
+
+![](http://upload-images.jianshu.io/upload_images/2949750-998a1a715c9f7733.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+
+#### 动画第二阶段
+第二阶段主要就是移动轴上的移动，我们可以根据最远移动距离和当前的动画进度计算出当前点在移动轴上的位置。然后根据当前的位置计算出缩放轴上需要的缩放量。最远距离可以通过吸入点和另一侧的边界计算出来。
+
+### Shader
+了解完原理我们来看Shader代码吧。Swift代码比较简单，只是生成了一个撑满屏幕的nxm网格，稍候再说。
+#### 传入Shader的数据
+`VertexIn`和`VertexOut`很普通，包含顶点位置和纹理坐标。`Uniforms`里包含了动画相关的信息，当前动画经过的时间`animationElapsedTime`，动画总时间`animationTotalTime`，吸入点`gatherPoint`。
+```c
+struct VertexIn
+{
+    packed_float3  position;
+    packed_float2  texcoord;
+};
+
+struct VertexOut
+{
+    float4  position [[position]];
+    float2  texcoord;
+};
+
+struct Uniforms
+{
+    float animationElapsedTime;
+    float animationTotalTime;
+    packed_float3 gatherPoint;
+};
+```
+
+#### 动画实现
+动画的实现都在Vertex Shader里。步骤如下。
+* ##### 计算并规范动画进度，得到动画进度`animationPercent`。
+```c
+VertexOut outVertex;
+VertexIn inVertex = vertexIn[vid];
+float animationPercent = uniforms.animationElapsedTime / uniforms.animationTotalTime;
+animationPercent = animationPercent > 1.0 ? 1.0 : animationPercent;
+```
+* ##### 求解移动轴`scaleAxis`和缩放轴`moveAxis`，以及最远移动距离。我们可以通过移动轴`scaleAxis`和缩放轴`moveAxis`获取点或者向量对应轴的分量。
+```c
+// 求解缩放轴和移动轴
+float moveMaxDisplacement = 2.0; // 最远移动位移，带符号
+int scaleAxis = 0; // 默认缩放轴为X
+int moveAxis = 1;   // 默认移动轴为Y，即沿着y方向吸入的效果
+if (uniforms.gatherPoint[0] <= -1 || uniforms.gatherPoint[0] >= 1) {
+    scaleAxis = 1;
+    moveAxis = 0;
+}
+if (uniforms.gatherPoint[moveAxis] >= 0) {
+    moveMaxDisplacement = uniforms.gatherPoint[moveAxis] + 1;
+} else {
+    moveMaxDisplacement = uniforms.gatherPoint[moveAxis] - 1;
+```
+
+* ##### 定义第一阶段动画在总动画中的占比。
+```c
+// 动画第一阶段的时间占比
+float animationFirstStagePercent = 0.4;
+```
+* ##### 计算移动轴的动画当前执行到的进度`moveAxisAnimationPercent`，在第一阶段执行完之前，这个值一直是0。
+```c
+// 移动轴的动画只有在第一阶段结束后才开始进行。
+float moveAxisAnimationPercent = (animationPercent - animationFirstStagePercent) / (1.0 - animationFirstStagePercent);
+moveAxisAnimationPercent = moveAxisAnimationPercent < 0.0 ? 0.0 : moveAxisAnimationPercent;
+moveAxisAnimationPercent = moveAxisAnimationPercent > 1.0 ? 1.0 : moveAxisAnimationPercent;
+```
+
+* ##### 根据点在移动轴上规范化后的坐标计算缩放量的最终值。在第一阶段时，根据最终缩放量和当前动画进度计算当前的缩放量`scaleAxisCurrentValue`。第二阶段时，直接使用最终缩放量，因为此时缩放量只和移动轴上坐标有关。
+```c
+// 用于缩放轴计算缩放量的因子
+float scaleAxisFactor = abs(uniforms.gatherPoint[moveAxis] - (inVertex.position[moveAxis] + moveMaxDisplacement *
+moveAxisAnimationPercent)) / abs(moveMaxDisplacement);
+float scaleAxisAnimationEndValue = 0.5 * 0.98 * cos(3.14 * scaleAxisFactor + 3.14) + 0.5 + 0.01;
+float scaleAxisCurrentValue = 0;
+if (animationPercent <= animationFirstStagePercent) {
+    scaleAxisCurrentValue = 1 +  (scaleAxisAnimationEndValue - 1) * animationPercent / animationFirstStagePercent;
+} else {
+    scaleAxisCurrentValue = scaleAxisAnimationEndValue;
+}
+```
+
+* ##### 根据移动轴上动画的进度`moveAxisAnimationPercent`和缩放轴的缩放量`scaleAxisCurrentValue`计算最终顶点的位置。
+
+```c
+float newMoveAxisValue = inVertex.position[moveAxis] + moveMaxDisplacement * moveAxisAnimationPercent;
+float newScaleAxisValue = inVertex.position[scaleAxis] - (inVertex.position[scaleAxis] - uniforms.gatherPoint[scaleAxis]) * (1 - scaleAxisCurrentValue);
+
+float3 newPosition = float3(0, 0, inVertex.position[2]);
+newPosition[moveAxis] = newMoveAxisValue;
+newPosition[scaleAxis] = newScaleAxisValue;
+outVertex.position = float4(newPosition, 1.0);
+outVertex.texcoord = inVertex.texcoord;
+return outVertex;
+```
+
+Vertex Shader到此就结束了，Fragment Shader很简单，采样，返回颜色。
+```c
+constexpr sampler s(coord::normalized, address::repeat, filter::linear);
+
+fragment float4 passThroughFragment(VertexOut inFrag [[stage_in]],
+                                     texture2d<float> diffuse [[ texture(0) ]],
+                                    const device Uniforms& uniforms [[ buffer(0) ]])
+{
+    float4 finalColor = diffuse.sample(s, inFrag.texcoord);
+    return finalColor;
+};
+```
+
+### Swift代码
+Swift代码里基本重用破碎效果的代码，在`MagicalEffectView.swift`中，最核心的代码也就是构建网格这一段了。
+```swift
+private func buildMesh() -> [Float] {
+    let viewWidth: Float = Float(UIScreen.main.bounds.width)
+    let viewHeight: Float = Float(UIScreen.main.bounds.height)
+    let meshCols: Int = 10;//Int(viewWidth / Float(meshUnitSizeInPixel.width));
+    let meshRows: Int = meshCols * Int(viewHeight / viewWidth);//Int(viewHeight / Float(meshUnitSizeInPixel.height));
+    let meshUnitSizeInPixel: CGSize = CGSize.init(width: CGFloat(viewWidth / Float(meshCols)), height: CGFloat(viewHeight /
+Float(meshRows))) // 每个mesh单元的大小
+    let sizeXInMetalTexcoord = Float(meshUnitSizeInPixel.width) / viewWidth * 2;
+    let sizeYInMetalTexcoord = Float(meshUnitSizeInPixel.height) / viewHeight * 2;
+    var vertexDataArray: [Float] = []
+    for row in 0..<meshRows {
+        for col in 0..<meshCols {
+            let startX = Float(col) * sizeXInMetalTexcoord - 1.0;
+            let startY = Float(row) * sizeYInMetalTexcoord - 1.0;
+            let point1: [Float] = [startX, startY, 0.0, Float(col) / Float(meshCols), Float(row) / Float(meshRows)];
+            let point2: [Float] = [startX + sizeXInMetalTexcoord, startY, 0.0, Float(col + 1) / Float(meshCols), Float(row) /
+Float(meshRows)];
+            let point3: [Float] = [startX + sizeXInMetalTexcoord, startY + sizeYInMetalTexcoord, 0.0, Float(col + 1) /
+Float(meshCols), Float(row + 1) / Float(meshRows)];
+            let point4: [Float] = [startX, startY + sizeYInMetalTexcoord, 0.0, Float(col) / Float(meshCols), Float(row + 1) /
+Float(meshRows)];
+            
+            vertexDataArray.append(contentsOf: point3)
+            vertexDataArray.append(contentsOf: point2)
+            vertexDataArray.append(contentsOf: point1)
+            
+            vertexDataArray.append(contentsOf: point3)
+            vertexDataArray.append(contentsOf: point1)
+            vertexDataArray.append(contentsOf: point4)
+        }
+    }
+    return vertexDataArray
+}
+```
+根据网格单元格的大小，构建顶点位置和UV数组。还有就是对Uniforms进行了修改。包含动画相关的信息。
+```swift
+struct Uniforms {
+    var animationElapsedTime: Float = 0.0
+    var animationTotalTime: Float = 0.6
+    var gatherPointX: Float = 0.8
+    var gatherPointY: Float = -1.0
+    var gatherPointZ: Float = 0.0
+    
+    func data() -> [Float] {
+        return [animationElapsedTime, animationTotalTime, gatherPointX, gatherPointY, gatherPointZ];
+    }
+    
+    static func sizeInBytes() -> Int {
+        return 5 * MemoryLayout<Float>.size
+    }
+}
+```
+其他自定义Transition动画的代码和之前一样，基本没动过。
+
+### 总结
+这种看似复杂的动画，可以把它拆解成几个简单的阶段，分开处理。对于每个阶段里复杂的运动，可以把运动拆分到不同的轴上，然后为每个轴上的运动规律推导公式。和上学时解题的思路还是很像的。使用网格制作动画相对于之前的点精灵，更加灵活，但是需要的顶点量也偏多。可以根据要做的效果斟酌使用。
