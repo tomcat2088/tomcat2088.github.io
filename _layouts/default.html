@@ -1,60 +1,35 @@
-<!DOCTYPE html>
-<html lang="en-us">
+---
+---
 
-  {% include head.html %}
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.6.0 by Michael Rose
+  Copyright 2017 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE.txt
+-->
+<html lang="{{ site.locale | slice: 0,2 | default: "en" }}" class="no-js">
+  <head>
+    {% include head.html %}
+    {% include head/custom.html %}
+  </head>
 
-  <body>
-  <div>
+  <body class="layout--{{ page.layout | default: layout.layout }}{% if page.classes or layout.classes %}{{ page.classes | default: layout.classes | join: ' ' | prepend: ' ' }}{% endif %}">
 
-  </div>
-    {% include sidebar.html %}
+    {% include browser-upgrade.html %}
+    {% include masthead.html %}
 
-    <!-- Wrap is the content to shift when toggling the sidebar. We wrap the
-         content to avoid any CSS collisions with our real content. -->
-    <div class="wrap">
-      <div class="masthead">
-        <div class="container">
-          <h3 class="masthead-title">
-            <a href="{{ site.baseurl }}/" title="Home">{{ site.title }}</a>
-            <small>{{ site.tagline }}</small>
-          </h3>
-        </div>
-      </div>
-      <div>
-      <div class="container content">
-      <h5 style="color: #aaaaaa">本博客内容皆为原创，如有转载，请注明出处。</h5>
-        {{ content }}
-      </div>
-<!--       <div class="container content">
-        <a id="tanx-a-mm_49939314_33450161_126968447"></a>
-      </div>
-      <div class="container content">
-        <a id="tanx-a-mm_49939314_33450161_126344402"></a>
-      </div>
-      <div class="container content">
-        <a id="tanx-a-mm_49939314_33450161_126344541"></a>
-      </div> -->
+    {{ content }}
+
+    <div class="page__footer">
+      <footer>
+        {% include footer/custom.html %}
+        {% include footer.html %}
+      </footer>
     </div>
 
-    <label for="sidebar-checkbox" class="sidebar-toggle"></label>
+    {% include scripts.html %}
 
-    <script>
-      (function(document) {
-        var toggle = document.querySelector('.sidebar-toggle');
-        var sidebar = document.querySelector('#sidebar');
-        var checkbox = document.querySelector('#sidebar-checkbox');
-
-        document.addEventListener('click', function(e) {
-          var target = e.target;
-
-          if(!checkbox.checked ||
-             sidebar.contains(target) ||
-             (target === checkbox || target === toggle)) return;
-
-          checkbox.checked = false;
-        }, false);
-      })(document);
-    </script>
     <script>
     var _hmt = _hmt || [];
     (function() {
@@ -64,43 +39,5 @@
       s.parentNode.insertBefore(hm, s);
     })();
     </script>
-    <!-- <script type="text/javascript">
-            tanx_s = document.createElement("script");
-            tanx_s.type = "text/javascript";
-            tanx_s.charset = "gbk";
-            tanx_s.id = "tanx-s-mm_49939314_33450161_126968447";
-            tanx_s.async = true;
-            tanx_s.src = "http://p.tanx.com/ex?i=mm_49939314_33450161_126968447";
-            tanx_h = document.getElementsByTagName("head")[0];
-            if(tanx_h)tanx_h.insertBefore(tanx_s,tanx_h.firstChild);
-    </script>
-    <script type="text/javascript">
-            tanx_s = document.createElement("script");
-            tanx_s.type = "text/javascript";
-            tanx_s.charset = "gbk";
-            tanx_s.id = "tanx-s-mm_49939314_33450161_126344402";
-            tanx_s.async = true;
-            tanx_s.src = "http://p.tanx.com/ex?i=mm_49939314_33450161_126344402";
-            tanx_h = document.getElementsByTagName("head")[0];
-            if(tanx_h)tanx_h.insertBefore(tanx_s,tanx_h.firstChild);
-    </script>
-    <script type="text/javascript">
-            tanx_s = document.createElement("script");
-            tanx_s.type = "text/javascript";
-            tanx_s.charset = "gbk";
-            tanx_s.id = "tanx-s-mm_49939314_33450161_126344541";
-            tanx_s.async = true;
-            tanx_s.src = "http://p.tanx.com/ex?i=mm_49939314_33450161_126344541";
-            tanx_h = document.getElementsByTagName("head")[0];
-            if(tanx_h)tanx_h.insertBefore(tanx_s,tanx_h.firstChild);
-    </script> -->
-
-    <div class="container content footer">
-      <span class=“copyright”>©2017-2020 handyTOOL</span>
-      <span class=“friend-link”><a href="http://www.jianshu.com/" target="_blank">简书</a></span>
-      <span class=“friend-link”><a href="http://www.cocoachina.com/" target="_blank">CocoaChina</a></span>
-      <span class=“friend-link”><a href="http://www.tuicool.com/" target="_blank">推酷</a></span>
-      <span class=“friend-link”><a href="http://outofmemory.cn/" target="_blank">outofmemory</a></span>
-    </div>
   </body>
 </html>
